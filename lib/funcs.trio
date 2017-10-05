@@ -2,594 +2,86 @@
 // All Rights Reserved
 
 ---
-name:csvImportEquips
-func
-doc:
-  /***************************************************************************************************
-    csvImportEquips(uri, importFlag, log)
-  
-    Description:
-      A generic function to import equip records from CSV data. Intended as a starting point for
-      developing customized CSV import scripts for specific applications.
-  
-    Parameters:
-      uri: The uri of the file to import
-      importFlag: A marker tag to apply to imported records to allow easy querying (default = null)
-      log: Log imported recs? If true, writes a log entry for each record created
-        (default = true)
-  
-    Returns:
-      A list of imported records.
-  
-    Notes:
-      1. This function expects a CSV with some or all of the following columns:
-  
-           Tag        | Type   | Description
-           ---------- | ------ | ---------------------------------------------------------------
-           siteName   | string | Name of site; used to construct 'siteRef' by matching site name
-           equipName  | string | Name of equip; used to set 'navName'
-           equipTags  | string | Arbitrary list of tags to apply using Axon
-  
-         Other arbitrary column names are also supported and will import as strings. (To import
-         tags that aren't strings, use the 'equipTags' column.)
-      2. The separator for the 'equipTags' column is a space (" "), which means that it cannot be used
-         to import strings with spaces in them. See csvReadRecs() for details.
-      3. All imported equips receive the 'equip' tag automatically.
-      4. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
-         for errors.
-      5. If the function is unable to create a unique match to an existing site using the "siteName"
-         column, it will throw an error.
-      6. See csvReadRecs() for the low-level import function.
-  
-  ***************************************************************************************************/
-src:
-  (uri, importFlag:null, log:true) => do
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
-    // Setup
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    addTags: {equip}
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
-    // Add Rec
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    addRec: (msg, tags) => do
-  
-      // Remove null tags
-      tags = tags.findAll v => v != null
-  
-      // Add import flag
-      if (importFlag != null) tags = tags.set(importFlag, marker())
-  
-      // Log an info message
-      if (log) logInfo("import", msg)
-  
-      // Add as new record to the database
-      commit(diff(null, tags, {add}))
-    end
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Main
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    // Template
-    template: {
-      siteName:"string",
-      equipName:"string",
-      equipTags:"taglist"
-    }
-  
-    // Read from CSV
-    d: csvReadRecs(uri, template)
-  
-    // Process records and commit to database
-    d.map() row => do
-      // Add universal tags
-      addTags.each() (v,n) => row = row.set(n, v)
-  
-      // Map site
-      siteMatch: readAll(site and dis==row["siteName"])
-      if (siteMatch.size != 1) do
-        throw "Could not make a unique match for site " + row["siteName"] +
-          "; found " + siteMatch.size + " records."
-      else do
-        row = row.set("siteRef", siteMatch.first->id).remove("siteName")
-      end
-  
-      // Set equip navName and disMacro
-      row = row
-        .set("navName", row["equipName"])
-        .set("disMacro", "\$navName")
-        .remove("equipName")
-  
-      // Commit
-      addRec("Importing equip " + row.dis, row)
-    end
-  
-  end
----
-name:csvImportHistory
-func
-doc:
-  /***************************************************************************************************
-    csvImportHistory(recs, uri, tsColumn, tsPattern, tz, opts, checked)
-  
-    Description:
-      A generic function to import CSV data and write it to point histories. Intended as a starting
-      point for developing customized CSV import scripts for specific applications.
-  
-    Parameters:
-      recs: A list of records (points and/or weatherPoints) to receive the data
-      uri: The uri of the file to import
-      tsColumn: Name of the time stamp column
-      tsPattern: Specify one or more patterns for the time stamps in the imported data
-        (default = "YYYY-MM-DD hh:mm:ss")
-      tz: Time zone in which to interpret the time stamp
-        (default = the server time zone)
-      opts: CSV import options (see documentation for ioReadCsv() function)
-      checked: Check parsing failures? If true, parsing failures will produce an error; if false,
-        parsing failures will only log a warning
-        (default = false)
-  
-    Returns:
-      A list of modified records.
-  
-    Notes:
-      1. Each record in 'recs' must have tag 'csvColumn' which provides a match to the correct CSV
-         column. Records without the 'csvColumn' tag are silently ignored.
-         - If the CSV file has column headers, 'csvColumn' must be a string that matches the
-           column header.
-         - Otherwise, it may be either a string in the form "v#", where # is the column position, or
-           an integer that specifies the column position. NOTE: SkySpark is zero-indexed, i.e. the
-           first column has position 0.
-      2. Optionally, each record may have the tag 'csvUnit', which allows the function to correctly
-         assign a unit to the CSV data. If 'csvUnit' is missing but the corresponding SkySpark point
-         has a 'unit' tag, then the function assigns the SkySpark unit by default.
-      3. Optionally, each record may also have tags 'csvRollupInterval' and 'csvRollupFunc', which
-         define a rollup interval and function to apply on data import. If 'csvRollupInterval' is
-         supplied without a rollup function, then a default rollup function is applied:
-         - Normal numeric points: average
-         - hisTotalized points: maximum
-         - Boolean points: pseudo-average (calculated TRUE time exceeds half the rollup time)
-         - COV points: throws an error
-      4. Optionally, each record may have a tag 'csvCallback', which specifies a callback function
-         to apply to the CSV data. The callback function follows the convention specified in the
-         his extension documentation; see: https://skyfoundry.com/doc/ext-his/doc#onWrite.
-         Specifically, the callback should have the form:
-         
-           (his, rec) => [return history grid]
-         
-         This callback function has the same effect as the 'hisOnWrite' tag, except that the
-         history transformation is applied *before* the CSV rollup function (if any) and *before*
-         the imported history is checked against the existing point history to drop previously
-         imported data.
-      5. For CSV data without headers, include 'noHeader' in the 'opts' dict.
-      6. This function automatically drops any imported data prior to the 'hisEnd' timestamp of the
-         history point being written. To re-import data for a particular point, clear the point
-         history first.
-      7. If 'tsPattern' is a list, then the function will try to parse the timestamp using each
-         specified pattern in order until either one is successful or they have all been exhausted.
-      8. This function drops any records which cannot be interpreted correctly as their associated
-         data type, with a warning.
-      9. This function may be called within a job in order to automatically keep the existing point
-         histories up to date.
-  
-  ***************************************************************************************************/
-src:
-  (recs, uri, tsColumn:"ts", tsPattern:"YYYY-MM-DD hh:mm:ss", tz:now().tz, opts:{}, checked:false) => do
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Map CSV Column Headers
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    mapCsvColName: n => if (opts.has("noHeader") and n.isNumber) ("v" + n).toTagName else n.toTagName
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Parse Date/Time Using Multiple Patterns
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    myParseDateTime: (x, pattern, tz, checked:checked) => do
-      // Try each pattern until one succeeds
-      ts: pattern.eachWhile() (pat) => x.parseDateTime(pat, tz, false)
-  
-      // If none was successful, throw an exception
-      if (ts == null and checked) do
-        throw "Unable to parse date/time '" + x + "' using any of the specified patterns: " + pattern
-      end
-  
-      // Return
-      return ts
-    end
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Parse Booleans from Numbers or Text
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    myParseBool: (x, checked:checked) => do
-      // First, try parsing as a Boolean
-      y: x.lower.parseBool(false)
-  
-      // Next, try parsing as a number
-      if (y == null) do
-        y = x.parseNumber(false)
-        if (y != null) y = y != 0
-      end
-  
-      // If nothing was successful, throw an exception
-      if (y == null and checked) do
-        throw "Unable to parse '" + x + "' as boolean."
-      end
-  
-      // Return
-      return y
-    end
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Write Point History to Folio
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    writePointHis: (point, timeCol, valCol, data) => do
-      // Drop all but the two columns we need
-      data = data.keepCols([timeCol, valCol])
-  
-      // If data column is missing, terminate early
-      if (not (data.has(valCol))) return null
-  
-      // Rename columns
-      data = data.renameCol(timeCol, "ts")
-      data = data.renameCol(valCol, "val")
-  
-      // Drop rows which have empty timestamp or data
-      data = data.findAll row => row.has("ts") and row.has("val")
-  
-      // Parse according to point metadata
-      if (point->kind=="Number" and point.has("csvUnit")) do
-        // Convert to number w/ appropriate units
-        data = data.map row => {
-          ts: row->ts.myParseDateTime(tsPattern, tz, checked),
-          val: row->val.parseNumber(checked).as(point->csvUnit)
-        }
-      else if (point->kind=="Number") do
-        // Convert to unitless number
-        data = data.map row => {
-          ts: row->ts.myParseDateTime(tsPattern, tz, checked),
-          val: row->val.parseNumber(checked)
-        }
-      else if (point->kind=="Bool") do
-        // Convert to boolean status
-        data = data.map row => {
-          ts: row->ts.myParseDateTime(tsPattern, tz, checked),
-          val: row->val.myParseBool(checked)
-        }
-      end
-  
-      // Drop incorrectly parsed rows (with a warning)
-      before: size(data)
-      data = data.findAll row => row.has("ts") and row.has("val")
-      after: size(data)
-      if (after < before) do
-        logWarn("importCsvData", "Unable to parse " + (before - after) + " rows of data for column '" + valCol + "'.")
-      end
-  
-      // Sort on timestamp
-      data = data.sort("ts")
-      
-      // Apply callback function
-      if (point.has("csvCallback")) do
-        // Callback function (note: somewhat unsafe)
-        cb: eval("x:" + point->csvCallback)
-        
-        // Check for valid function
-        if (not cb.isFunc) throw "csvCallback tag does not evaluate to a valid function!"
-        
-        // Apply transformation
-        data = cb(data, point)
-      end
-  
-      // Apply rollup function
-      if (point.has("csvRollupInterval")) do
-        // Rollup function
-        if (point.has("csvRollupFunc")) do
-          // User-specified rollup function
-          data = data.hisRollup(eval("func:"+point->csvRollupFunc), point->csvRollupInterval)
-        else if (point.has("hisTotalized")) do
-          // Totalized
-          data = data.hisRollup(max, point->csvRollupInterval)
-        else if (point->kind=="Bool") do
-          data = data.hisRollup(durTrue, point->csvRollupInterval)
-            .map() row => row.set("val", row->val >= point->csvRollupInterval)
-        else if (point["hisInterpolate"]=="cov") do
-          throw point->dis + ": For COV interpolation, an explicit CSV rollup function is required."
-        else do
-          // Normal
-          data = data.hisRollup(mean, point->csvRollupInterval)
-        end
-  
-        // Drop rows for which rollup function produced null data
-        data = data.findAll row => row.has("ts") and row.has("val")
-  
-        // Return if empty (no new data)
-        if (data.isEmpty) return null
-      end
-  
-      // Drop any data for which the point already has history
-      if (point.has("hisEnd")) do
-        data = data.map row => if (row->ts <= point->hisEnd) null else row
-  
-        // Return if empty (no new data)
-        if (data.isEmpty) return null
-      end
-  
-      // Convert from logger units to SkySpark units
-      if (point->kind=="Number" and point.has("unit")) do
-        data = data.map row => row.set("val", (row->val).to(point->unit))
-      end
-  
-      // Convert from input timezone to point timezone
-      if (point.has("tz")) do
-        data = data.map row => row.set("ts", (row->ts).toTimeZone(point->tz))
-      end
-  
-      // Write history to point
-      data.hisWrite(point)
-    end
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Main
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    // Timestamp column name
-    tsColumn = tsColumn.mapCsvColName
-  
-    // Coerce tsPattern to list
-    if ( not(isList(tsPattern)) ) tsPattern = [tsPattern]
-  
-    // Valid points of interest
-    p: recs.toRecList.findAll() x => x.has("csvColumn")
-  
-    // Valid CSV headers = timestamp + CSV column names from point metadata
-    h: [tsColumn].addAll(p.map point => mapCsvColName(point->csvColumn))
-  
-    // Read the data and subset to needed columns
-    try do
-      d: ioReadCsv(uri, opts).keepCols(h)
-    catch (ex) do
-      // If error, log, and rethrow error
-      logErr("csvImportHistory", "Error reading URI: " + uri)
-      throw (ex)
-    end
-  
-    // Extract relevant data for each rec and store to Folio
-    errorFound: false
-    p.each() point => do
-      // Catch and log any errors
-      try do
-        writePointHis(point, tsColumn, mapCsvColName(point->csvColumn), d)
-      end catch (ex) do
-        logErr("csvImportHistory", "Error writing history for record: " + point->id )
-        errorFound = true
-      end
-    end
-  
-    // Error check
-    if (errorFound) throw "Errors occured while importing CSV history from `" + uri + "`. See Log."
-  
-    // Re-read and return list of all affected recs
-    p.map() p => readById(p->id)
-  
-  end
----
-name:csvImportPoints
-func
-doc:
-  /***************************************************************************************************
-    csvImportPoints(uri, importFlag, log)
-  
-    Description:
-      A generic function to import point records from CSV data. Intended as a starting point for
-      developing customized CSV import scripts for specific applications.
-  
-    Parameters:
-      uri: The uri of the file to import
-      importFlag: A marker tag to apply to imported records to allow easy querying (default = null)
-      log: Log imported recs? If true, writes a log entry for each record created
-        (default = true)
-  
-    Returns:
-      A list of imported records.
-  
-    Notes:
-      1. This function expects a CSV with some or all of the following columns:
-  
-           Tag        | Type   | Description
-           ---------- | ------ | ------------------------------------------------------------------
-           siteName   | string | Name of site; used to construct 'siteRef' by matching site name
-           equipName  | string | Name of equip; used to construct 'equipRef' by matching equip name
-           pointName  | string | Name of point; used to set 'navName'
-           pointTags  | string | Arbitrary list of tags to apply using Axon
-           kind       | string | Kind of point (e.g. "Number" or "Bool"); must match SkySpark kind
-           unit       | string | Unit for point data (e.g. "kW")
-  
-         Other arbitrary column names are also supported and will import as strings. (To import
-         tags that aren't strings, use the 'pointTags' column.)
-      2. The separator for the 'pointTags' column is a space (" "), which means that it cannot be used
-         to import strings with spaces in them. See csvReadRecs() for details.
-      3. All imported points receive the 'point', 'his', and 'analytics' tags automatically. In
-         addition, unless a custom "tz" tag is specified, the point will inherit the site time zone
-         (if any) or else the project time zone.
-      4. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
-         for errors.
-      5. If the function is unable to create a unique match to an existing site using the "siteName"
-         column and a unique match to an existing equip under that site using the "equipName" column,
-         it will throw an error.
-      6. See csvReadRecs() for the low-level import function.
-  
-  ***************************************************************************************************/
-src:
-  (uri, importFlag:null, log:true) => do
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
-    // Setup
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    addTags: {point, his, analytics}
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
-    // Add Rec
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    addRec: (msg, tags) => do
-  
-      // Remove null tags
-      tags = tags.findAll v => v != null
-  
-      // Add import flag
-      if (importFlag != null) tags = tags.set(importFlag, marker())
-  
-      // Log an info message
-      if (log) logInfo("import", msg)
-  
-      // Add as new record to the database
-      commit(diff(null, tags, {add}))
-    end
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Main
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    // Template
-    template: {
-      siteName:"string",
-      equipName:"string",
-      pointName:"string",
-      pointTags:"taglist",
-      kind:"string",
-      unit:"string"
-    }
-  
-    // Read from CSV
-    d: csvReadRecs(uri, template)
-  
-    // Process records and commit to database
-    d.map() row => do
-      // Add universal tags
-      addTags.each() (v,n) => row = row.set(n, v)
-  
-      // Map site
-      siteMatch: readAll(site and dis==row["siteName"])
-      if (siteMatch.size != 1) do
-        throw "Could not make a unique match for site " + row["siteName"] +
-          "; found " + siteMatch.size + " records."
-      else do
-        row = row.set("siteRef", siteMatch.first->id).remove("siteName")
-      end
-  
-      // Map equip
-      equipMatch: readAll(equip and siteRef==row->siteRef and navName==row["equipName"])
-      if (equipMatch.size != 1) do
-        throw "Could not make a unique match for equip " + row["equipName"] +
-          "; found " + equipMatch.size + " records."
-      else do
-        row = row.set("equipRef", equipMatch.first->id).remove("equipName")
-      end
-  
-      // Set point navName and disMacro
-      row = row
-        .set("navName", row["pointName"])
-        .set("disMacro", "\$equipRef \$navName")
-        .remove("pointName")
-  
-      // Set timezone (if missing)
-      if (row.missing("tz")) do
-        timezone: readById(row->siteRef)["tz"]
-        if (timezone==null) timezone = now().tz
-        row = row.set("tz", timezone)
-      end
-  
-      // Commit
-      addRec("Importing point " + row.dis, row)
-    end
-  
-  end
----
 name:csvImportSites
 func
 doc:
-  /***************************************************************************************************
-    csvImportSites(uri, importFlag, log)
+  Imports site records from CSV data. Intended for use in tailored CSV import scripts.
+
+  Parameters
+  ----------
   
-    Description:
-      A generic function to import site records from CSV data. Intended as a starting point for
-      developing customized CSV import scripts for specific applications.
+  - **uri:** The URI of the file to read
+  - **opts:** A dict of control options; see *Options*
   
-    Parameters:
-      uri: The uri of the file to import
-      importFlag: A marker tag to apply to imported records to allow easy querying (default = null)
-      log: Log imported recs? If true, writes a log entry for each record created
-        (default = true)
+  Returns
+  -------
   
-    Returns:
-      A list of imported records.
+  A grid of imported site records.
   
-    Notes:
-      1. This function expects a CSV with some or all of the following columns:
+  Options
+  -------
   
-           Tag         | Type   | Description
-           ----------- | ------ | --------------------------------------------------------
-           siteName    | string | Name of site; converted to 'dis' tag
-           siteTags    | string | Arbitrary list of tags to apply using Axon
-           area        | number | Area of site
-           tz          | string | String designation for site time zone
-           geoAddr     | string | Street address
-           geoCity     | string | City
-           geoState    | string | State / province
-           geoCountry  | string | Country code
-           geoCoord    | coord  | Lat Lng in decimal format
-           weatherName | string | Weather location name; used to construct 'weatherRef' by
-                       |        | matching weather record description
+  The following options are supported:
   
-         Other arbitrary column names are also supported and will import as strings. (To import
-         tags that aren't strings, use the 'siteTags' column.)
-      2. The separator for the 'siteTags' column is a space (" "), which means that it cannot be used
-         to import strings with spaces in them. See csvReadRecs() for details.
-      3. All imported sites receive the 'site' tag automatically. If a time zone is missing, the new
-         site will inherit the project's time zone.
-      4. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
-         for errors.
-      5. See csvReadRecs() for the low-level import function.
+  - 'flag': string specifying the name of a marker tag to apply to the new records as a flag
+  - 'log': Boolean indicating whether log entries should be made for each imported record
+  - 'template': A CSV template for supplemental columns; see `csvReadRecs`
   
-  ***************************************************************************************************/
+  If supplied, 'template' will be merged with the default template (see *Details*). In the case of
+  conflicts, the user-specified template entries take precedence.
+  
+  In addition, valid options for `csvReadRecs` may be supplied and will be passed through.
+  
+  Details
+  -------
+  
+  This function expects a CSV file with some or all of the following columns:
+
+    Tag         | Type    | Description
+    ----------- | ------- | ------------------------------------------
+    siteName    | string  | Name of site; converted to 'dis' tag
+    siteTags    | taglist | Arbitrary list of tags to apply using Axon
+    area        | number  | Area of site
+    tz          | string  | String designation for site time zone
+    geoAddr     | string  | Street address
+    geoCity     | string  | City
+    geoState    | string  | State / province
+    geoCountry  | string  | Country code
+    geoCoord    | coord   | Latitude/longitude in decimal format
+    weatherName | string  | Weather location name; used to construct
+                |         | 'weatherRef' by matching weather record
+                |         | description
+    weatherRef  | ref     | Weather location reference; silently
+                |         | overrides 'weatherName'
+    
+  This default template can be modified using the 'template' option. Other arbitrary column names
+  are also supported and will import as strings. See `csvReadRecs` for the low-level import
+  function.
+  
+  Notes
+  -----
+  
+  1. All imported sites receive the 'site' tag automatically. If an import 'flag' option is
+     specified, imported sites receive it as a marker tag as well.
+  2. All columns except 'siteName' are optional. 
+  3. If the time zone 'tz' is missing, the new site will inherit the project's time zone.
+  4. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
+     for errors.
 src:
-  (uri, importFlag:null, log:true) => do
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
+  (uri, opts:{}) => do
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
     // Setup
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+
+    // Default options
+    opts = merge({log:true}, opts)
+    
+    // Tags to add
     addTags: {site}
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
-    // Add Rec
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    addRec: (msg, tags) => do
-  
-      // Remove null tags
-      tags = tags.findAll v => v != null
-  
-      // Add import flag
-      if (importFlag != null) tags = tags.set(importFlag, marker())
-  
-      // Log an info message
-      if (log) logInfo("import", msg)
-  
-      // Add as new record to the database
-      commit(diff(null, tags, {add}))
-    end
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Main
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    // Template
+    if (opts.has("flag")) addTags = addTags.set(opts->flag, marker())
+    
+    // CSV Template
     template: {
       siteName:"string",
       siteTags:"taglist",
@@ -599,25 +91,53 @@ src:
       geoState:"string",
       geoCountry:"string",
       geoCoord:"coord",
+      weatherRef:"ref",
       weatherName:"string"
     }
-  
+    if (opts.has("template")) template = merge(template, opts->template)
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Functions
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    // Add new record
+    addRec: (msg, tags) => do
+
+      // Remove null tags
+      tags = tags.findAll v => v != null
+
+      // Log an info message
+      if (opts->log) logInfo("import", msg)
+
+      // Add as new record to the database
+      commit(diff(null, tags, {add}))
+    end
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Main
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
     // Read from CSV
-    d: csvReadRecs(uri, template)
-  
+    d: csvReadRecs(uri, template, opts)
+
     // Process records and commit to database
     d.map() row => do
       // Add universal tags
-      addTags.each() (v,n) => row = row.set(n, v)
-  
+      row = union(row, addTags)
+
       // Set site description
       row = row.set("dis", row["siteName"]).remove("siteName")
-  
+
       // Set timezone (if missing)
       if (row.missing("tz")) row = row.set("tz", now().tz)
-  
+
       // Map weather location
-      if (row.has("weatherName")) do
+      if (row.has("weatherRef")) do
+        weatherMatch: readById(row->weatherRef, false)
+        if (weatherMatch == null) throw "Matching weather location record not found."
+        row = row.remove("weatherName")
+        
+      end else if (row.has("weatherName")) do
         weatherMatch: readAll(weather and dis==row["weatherName"])
         if (weatherMatch.size != 1) do
           throw "Could not make a unique match for weather location " + row["weatherName"] +
@@ -626,314 +146,113 @@ src:
           row = row.set("weatherRef", weatherMatch.first->id).remove("weatherName")
         end
       end
-  
+
       // Commit
       addRec("Importing site " + row.dis, row)
     end
-  
-  end
----
-name:csvImportWeather
-func
-doc:
-  /***************************************************************************************************
-    csvImportWeather(uri, importFlag, log)
-  
-    Description:
-      A generic function to import weather location records from CSV data. Intended as a starting
-       point for developing customized CSV import scripts for specific applications.
-  
-    Parameters:
-      uri: The uri of the file to import
-      importFlag: A marker tag to apply to imported records to allow easy querying (default = null)
-      log: Log imported recs? If true, writes a log entry for each record created
-        (default = true)
-  
-    Returns:
-      A list of imported records.
-  
-    Notes:
-      1. This function expects a CSV with some or all of the following columns:
-  
-           Tag         | Type   | Description
-           ----------- | ------ | ------------------------------------------
-           dis         | string | Name / label of weather location
-           weatherTags | string | Arbitrary list of tags to apply using Axon
-           geoCity     | string | City
-           geoCoord    | axon   | Geographic coordinates (as Axon code)
-           geoState    | string | State / province
-           geoCountry  | string | Country code
-           tz          | string | String designation for location time zone
-  
-         Other arbitrary column names are also supported and will import as strings. (To import
-         tags that aren't strings, use the 'weatherTags' column.)
-      2. The separator for the 'weatherTags' column is a space (" "), which means that it cannot be
-         used to import strings with spaces in them. See csvReadRecs() for details.
-      3. There is no Axon literal for the coordinate (coord) data type, so the Axon function coord()
-         must be used to construct it. The 'geoCoord' column should contain a call to coord() which
-         the function will execute to create the coordinate.
-      4. All imported weather records receive the 'weather' tag automatically. If a time zone is
-         missing, the new record will inherit the project's time zone. Caution: this may not correctly
-         match the location's geographic coordinates.
-      5. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
-         for errors.
-      6. See csvReadRecs() for the low-level import function.
-  
-  ***************************************************************************************************/
-src:
-  (uri, importFlag:null, log:true) => do
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
-    // Setup
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    addTags: {weather}
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
-    // Add Rec
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    addRec: (msg, tags) => do
-  
-      // Remove null tags
-      tags = tags.findAll v => v != null
-  
-      // Add import flag
-      if (importFlag != null) tags = tags.set(importFlag, marker())
-  
-      // Log an info message
-      if (log) logInfo("import", msg)
-  
-      // Add as new record to the database
-      commit(diff(null, tags, {add}))
-    end
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Main
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    // Template
-    template: {
-      dis:"string",
-      weatherTags:"taglist",
-      geoCity:"string",
-      geoCoord:"axon",
-      geoState:"string",
-      geoCountry:"string"
-    }
-  
-    // Read from CSV
-    d: csvReadRecs(uri, template)
-  
-    // Process records and commit to database
-    d.map() row => do
-      // Add universal tags
-      addTags.each() (v,n) => row = row.set(n, v)
-  
-      // Set timezone (if missing)
-      if (row.missing("tz")) row = row.set("tz", now().tz)
-  
-      // Commit
-      addRec("Importing weather location " + row.dis, row)
-    end
-  
-  end
----
-name:csvImportWeatherPoints
-func
-doc:
-  /***************************************************************************************************
-    csvImportWeatherPoints(uri, importFlag, log)
-  
-    Description:
-      A generic function to import weatherPoint records from CSV data. Intended as a starting point
-      for developing customized CSV import scripts for specific applications.
-  
-    Parameters:
-      uri: The uri of the file to import
-      importFlag: A marker tag to apply to imported records to allow easy querying (default = null)
-      log: Log imported recs? If true, writes a log entry for each record created
-        (default = true)
-  
-    Returns:
-      A list of imported records.
-  
-    Notes:
-      1. This function expects a CSV with some or all of the following columns:
-  
-           Tag              | Type   | Description
-           ---------------- | ------ | ----------------------------------------------------------
-           weatherName      | string | Weather location name; used to construct 'weatherRef' by
-                            |        | matching weather record description
-           weatherPointName | string | Name of weatherPoint; used to set 'dis'
-           weatherPointTags | string | Arbitrary list of tags to apply using Axon
-           kind             | string | Kind of weatherPoint (e.g. "Number" or "Bool"); must match
-                            |        | SkySpark kind
-           unit             | string | Unit for weatherPoint data (e.g. "°F")
-  
-         Other arbitrary column names are also supported and will import as strings. (To import
-         tags that aren't strings, use the 'weatherPointTags' column.)
-      2. The separator for the 'weatherPointTags' column is a space (" "), which means that it cannot
-         be used to import strings with spaces in them. See csvReadRecs() for details.
-      3. All imported records receive the 'point', 'weatherPoint', 'his', and 'analytics' tags
-         automatically. In addition, unless a custom "tz" tag is specified, the point will inherit the
-         weather location time zone (if any) or else the project time zone.
-      4. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
-         for errors.
-      5. If the function is unable to create a unique match to an existing weather record using the
-         "weatherName" tag, it will throw an error.
-      6. See csvReadRecs() for the low-level import function.
-  
-  ***************************************************************************************************/
-src:
-  (uri, importFlag:null, log:true) => do
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
-    // Setup
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    addTags: {point, weatherPoint, his, analytics}
-  
-  	//////////////////////////////////////////////////////////////////////////////////////////////////
-    // Add Rec
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    addRec: (msg, tags) => do
-  
-      // Remove null tags
-      tags = tags.findAll v => v != null
-  
-      // Add import flag
-      if (importFlag != null) tags = tags.set(importFlag, marker())
-  
-      // Log an info message
-      if (log) logInfo("import", msg)
-  
-      // Add as new record to the database
-      commit(diff(null, tags, {add}))
-    end
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Main
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    // Template
-    template: {
-      weatherName:"string",
-      weatherPointName:"string",
-      weatherPointTags:"taglist",
-      kind:"string",
-      unit:"string"
-    }
-  
-    // Read from CSV
-    d: csvReadRecs(uri, template)
-  
-    // Process records and commit to database
-    d.map() row => do
-      // Add universal tags
-      addTags.each() (v,n) => row = row.set(n, v)
-  
-      // Map weather record
-      weatherMatch: readAll(weather and dis==row["weatherName"])
-      if (weatherMatch.size != 1) do
-        throw "Could not make a unique match for weather location " + row["weatherName"] +
-          "; found " + weatherMatch.size + " records."
-      else do
-        row = row.set("weatherRef", weatherMatch.first->id).remove("weatherName")
-      end
-  
-      // Set weather point description
-      row = row
-        .set("dis", row["weatherPointName"])
-        .remove("weatherPointName")
-  
-      // Set timezone (if missing)
-      if (row.missing("tz")) do
-        timezone: readById(row->weatherRef)["tz"]
-        if (timezone==null) timezone = now().tz
-        row = row.set("tz", timezone)
-      end
-  
-      // Commit
-      addRec("Importing weatherPoint " + row.dis, row)
-    end
-  
+
   end
 ---
 name:csvReadRecs
 func
 doc:
-  /***************************************************************************************************
-    csvReadRecs(uri, template, tagSep)
+  Import records from CSV data using a flexible user-supplied template. This function is *not*
+  designed to read and interpret [Haystack-compliant]`https://project-haystack.org/doc/Csv` CSV
+  files, but rather to provide a flexible interface for pulling general purpose CSV data into
+  Folio records.
+
+  Parameters
+  ----------
   
-    Description:
-      Low-level function to assist with importing records from CSV data. Reads and parses tags from
-      CSV data using a user-supplied template.
+  - **uri:** The URI of the file to read
+  - **template:** A dict specifying the data types for the CSV columns; see *Details*
+  - **opts:** A dict of control options; see *Options*
   
-    Parameters:
-      uri: The uri of the file to read
-      template: A dict with name-value pairs giving the data type for the CSV columns; see Details
-        (default = no template)
-      tagSep: For "taglist" column type, the separator to use for tag parsing; see Details
-        (default = " ")
+  Returns
+  -------
   
-    Returns:
-      A grid of dicts ready to commit as records.
+  A grid of dicts ready to commit as Folio records.
   
-    Details:
-      Use 'template' to specify how to interpret the CSV columns. Supported data types include:
+  Options
+  -------
   
-        axon:     parsed and executed as literal Axon code
-        bool:     parsed as a boolean
-        coord:    parsed as a coord
-        date:     parsed as a date
-        datetime: parsed as a dateTime
-        marker:   any non-empty value is interpreted as setting a marker flag
-        number:   parsed as a number
-        ref:      parsed as a reference
-        string:   parsed as a string
-        taglist:  processes as a tag list using Axon; see below
+  The following options are supported:
   
-      Any other value in the template will throw an error when the corresponding column is parsed.
+  - 'sep': tag and value separator to use for '"taglist"' and '"coord"' data types; see *Details*
+  - 'delimiter': column delimiter character; passed through to `ioReadCsv`
+  - 'noHeader': passed through to `ioReadCsv`
   
-      Tag lists ("taglist" value in the template) are processed as dicts using Axon, with 'tagSep'
-      interpreted as separating the tags. 'tagSep' cannot be a comma, as this would conflict with
-      the CSV column separator.
+  The default value of 'sep' is '" "', which maps to any whitespace character. 'sep' must differ
+  from the column 'delimiter' (by default, '","') or parsing will fail.
   
-    Notes:
-      1. CSV column names should be valid tags, or parsing may fail.
-      2. When "taglist" is used as a column type, the column may not contain strings that include
-         'tagSep', or else parsing will fail. (Specifically, any instances of 'tagSep' within strings
-         will get replaced by commas.)
-      3. Coord, XStr, and the Haystack collection data types (Dicts, Lists, and Grids) are not
-         supported directly, but can be created indirectly via Axon code by specifying the "axon"
-         keyword in the template.
+  Details
+  -------
   
-  ***************************************************************************************************/
+  Use 'template' to specify how to interpret the CSV columns. In 'template', key names match to
+  column names in the CSV file and key values are strings specifying a column data type. Supported
+  data types are:
+  
+  - 'axon': parsed and executed as literal Axon code
+  - 'bool': parsed as a boolean
+  - 'coord': parsed as a coord; see below
+  - 'date': parsed as a date
+  - 'datetime': parsed as a dateTime
+  - 'marker': any non-empty value is interpreted as setting a marker flag
+  - 'number': parsed as a number
+  - 'ref': parsed as a reference
+  - 'string': parsed as a string
+  - 'taglist': parsed as a tag list using Axon; see below
+  
+  Any other value in the template will throw an error when the corresponding column is parsed, while
+  missing columns are parsed as strings by default. Data type values are not case sensitive.
+  
+  Coordinates ( '"coord"' data type) are processed using the `coord` function. The 'sep' option
+  specifies the seperator between the two arguments of 'coord'. Similarly, tag lists ( '"taglist"'
+  data type) are processed as dicts using Axon, with 'sep' interpreted as separating the tags in
+  the dict. If needed in tag values, 'sep' can be protected by enclosing in quotes or escaping
+  with '\'; see `delimConvert` for more information.
+  
+  Notes
+  ------
+  
+  1. CSV column names should be valid tags, or parsing may fail.
+  2. XStr and the Haystack collection data types (Dicts, Lists, and Grids) are not supported
+     directly, but can be created indirectly via Axon code by specifying the '"axon"' data type in
+     the template. If the Axon expression contains column delimiters, enclose it with quotes.
 src:
-  (uri, template:{}, tagSep:" ") => do
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
+  (uri, template:{}, opts:{}) => do
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Options
+    ////////////////////////////////////////////////////////////////////////////////////////////////  
+    
+    // Default options
+    opts = merge({sep:" "}, opts)
+    
+    // Valid pass-through options for ioReadCsv()
+    ioOpts: opts.findAll() (v, n) => n.in(["delimiter", "noHeader"])
+    
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Functions
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    
     // Parsing functions
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
-    parseTags: (s) => eval("{" + split(s,tagSep).concat(",") + "}")
+    parseTags: (s) => delimConvert(s,opts->sep,",").stringToDict
     parseRef2: (r) => if (r.startsWith("@")) parseRef(r[1..-1]) else parseRef(r)
-    parseCoord: (c) => eval("coord(" + split(c, tagSep).concat(",") + ")")
-  
-    //////////////////////////////////////////////////////////////////////////////////////////////////
+    parseCoord: (c) => eval("coord(" + delimConvert(s,opts->sep,",") + ")")
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
     // Main
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-  
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
     // Read and parse recs from file
-    ioReadCsv(uri).map() row => do
+    ioReadCsv(uri, ioOpts).map() row => do
       // Placeholder for output row
       tags: {}
-  
+
       // Filter null and empty string input
       row = row.findAll() v => (v != null and v != "")
-  
+
       // Parse tags
       row.each() (v,n) => do
         // Check for template
@@ -961,104 +280,117 @@ src:
           else do
             throw "Invalid field type for field " + n + ": " + template[n]
           end
-  
+
         // No template; use as is
         else do
           tags = tags.set(n,v)
         end
       end
-  
+
       // Return processed row of tags
       return tags
     end
-  
+
   end
-  
 ---
-name:csvWriteHistory
+name:delimConvert
 func
 doc:
-  /***************************************************************************************************
-    csvWriteHistory(data, uri, opts)
+  In a string, convert instances of one delimiter to another. Converts instances of delimiter
+  character 'old' in string 's' to 'new' (default '","'), under the following rules:
   
-    Description:
-      Writes history data to a CSV file. Limited data processing and re-formatting options are
-      available; see Details.
+  - Delimiters inside quoted strings are ignored
+  - Escaped delimiters (instances of 'old' prefixed by '\') are not converted, but the escape
+    character '\' is stripped from the output
+  - All other instances of 'old' are changed to 'new'
+  - Consecutive delimiters are combined
   
-    Parameters:
-      data: grid of history data to write to file
-      uri: path to the output file to write, e.g. `io/mydata.csv`
-      opts: dict containing CSV formatting control options; see Details
+  If 'old' is whitespace, then any whitespace character qualifies: space, '\t', '\n', '\r', '\f'.
   
-    Returns:
-      Number data points written into the csv file.
+  Examples
+  --------
+
+    "a b   c".delimConvert(" ")                     >> a,b,c
+    "a;\"b;c\";c".delimConvert(";")                 >> a,"b;c",c
+    "name:\"First Last\" age:34".delimConvert(" ")  >> name:"First Last",age:34
+    r";\;".delimConvert(";", "|")                   >> |;
   
-    Details:
-      The 'opts' parameter controls data processing and formatting prior to writing output. The
-      following options are available:
-  
-        fold:       History rollup fold function to apply
-        foldFinder: Function to find an appropriate fold function, for use with hisRollupAuto()
-        interval:   History rollup interval to apply
-        pattern:    Timestamp formatting pattern for CSV output
-        rollup:     Marker; if present a history rollup will be performed prior to export
-        rmUnit:     Market; if present units will be stripped from numeric data prior to export
-  
-      All options are optional, except in relation to one another as specified in the Notes. 'fold',
-      'foldFinder', and 'interval' have no effect unless 'rollup' is specified.
-  
-    Notes:
-      1. Specifying a fold function for a grid with heterogeneous data types (e.g. a mixture of
-         numeric and Boolean data) is likely to fail. Instead, process the data prior to calling the
-         csvWriteHistory() function.
-      2. In 'opts':
-         - If 'fold' is specified explicitly, then hisRollup() will be used and 'interval' must also
-           be specified.
-         - If 'foldFinder' is specified explicitly, then hisRollupAuto() will be used and 'interval'
-           must also be specified.
-         - Otherwise, hisRollupAuto() will be used and 'interval' is optional.
-      3. Order of columns in CSV output is indeterminate
-  
-  ***************************************************************************************************/
+  Quotes omitted from outputs.
 src:
-  (data, uri, opts:{}) => do
-  
-    // Apply optional history rollup
-    if (opts.has("rollup")) do
-      if (opts.has("fold")) do
-        // Use hisRollup()
-        if (not opts.has("interval")) throw "If 'fold' function is specified, 'interval' must also be specified."
-        data = data.hisRollup(opts->fold, opts->interval)
-      else do
-        // Use hisRollupAuto()
-        if (opts.has("foldFinder")) do
-          if (not opts.has("interval")) throw "If 'foldFinder' function is specified, 'interval' must also be specified."
-          data = data.hisRollupAuto(opts->interval, opts->foldFinder)
-        else if (opts.has("interval"))
-          data = data.hisRollupAuto(opts->interval)
-        else do
-          data = data.hisRollupAuto()
+  (s, old, new:",") => do
+    // Check delimiter sizes
+    if (old.size > 1 or new.size > 1) do
+      throw "Old and new delimiters must each be a single character."
+    end
+    
+    // Trivial case
+    if (old == new) return s
+    
+    // Using a whitespace delimiter?
+    oldIsSpace: old[0].isSpace
+    
+    // Setup (output buffer and flags)
+    out: ""
+    prev: null
+    inQuotes: false
+    
+    // Scan and process input character-by-character
+    (0..(s.size-1)).each() i => do
+      // Get character
+      char: s[i..i]
+      
+      // Switch...
+      
+      // Escape character: Buffer one only
+      if (char == "\\") do
+        if (prev == "\\") do
+          out = out + prev
         end
+      
+      // Escaped quote
+      end else if (char == "\"" and prev == "\\") do
+        out = out + prev + char
+        
+      // Unescaped quote
+      end else if (char == "\"") do
+        inQuotes = not(inQuotes)
+        out = out + char
+        
+      // Inside quotes: As-is
+      end else if (inQuotes) do
+        out = out + char
+        
+      // Escaped delimiter
+      end else if (char == old and prev == "\\") do
+        out = out + char
+        
+      // Unescaped delimiter
+      end else if (char == old) do
+        
+        // Whitespace delimiter, non-consecutive: Replace
+        if (oldIsSpace and not(prev[0].isSpace)) do
+          out = out + new
+        
+        // Non-whitespace delimiter, non-consecutive: Replace
+        else if (old != prev) do
+          out = out + new
+        
+        // Consecutive delimiters: Skip (no action)
+        end
+        
+      // All other characters
+      end else do
+        out = out + char
+        
       end
+      
+      // Update
+      prev = char
     end
-  
-    // Optional formatting
-    data = data.map() r => do
-      // Timestamp formatting
-      if (opts.has("pattern")) do
-        r = r.map() v => if (v.isDateTime) format(v, opts->pattern) else v
-      end
-  
-      // Unit stripping
-      if (opts.has("rmUnit")) do
-        r = r.map() v => if (v.isNumber) v.as("") else v
-      end
-  
-      // Return
-      r
-    end
-  
-    // Write CSV
-    ioWriteCsv(data, uri)
+    
+    // Handle edge case: s ends in \
+    if (s.endsWith("\\")) out = out + "\\"
+    
+    // Return
+    return out
   end
-  
