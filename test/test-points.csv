@@ -1,0 +1,6 @@
+siteName,equipName,pointName,pointTags,kind,unit,csvColumn,csvUnit
+My Building,Main Meter,Power,elec power sensor,Number,kW,Site Power,W
+My Building,Main Meter,Energy,elec energy sensor hisTotalized,Number,kWh,Site Energy,Wh
+My Building,Main Meter,Power Factor,elec pf sensor mytag:42,Number,,Site Power Factor,
+My Building,AHU-1,Status,sensor,Bool,,AHU-1 Status,
+My Building,AHU-1,Command,cmd,Bool,,AHU-1 Command,
