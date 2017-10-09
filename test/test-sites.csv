@@ -1,1 +1,1 @@
-siteName,siteTags,area,tz,geoAddr,geoCity,geoState,geoCountryRSF,nze,360000ft²,,15013 Denver West Parkway,Golden,CO,USNWTC,campus tz:"Denver" telephone:"303-384-6900",,,18200 Highway 128,Boulder,CO,USMy Building,,3000ft²,New_York,123 ABC St.,New York,NY,US
+siteName,siteTags,area,tz,weatherName,geoAddr,geoCity,geoState,geoCountryRSF,nze,360000ft²,,"Golden, CO",15013 Denver West Parkway,Golden,CO,USNWTC,campus tz:"Denver" telephone:"303-384-6900",,,"Golden, CO",18200 Highway 128,Boulder,CO,USMy Building,,3000ft²,New_York,,123 ABC St.,New York,NY,US

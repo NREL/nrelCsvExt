@@ -23,6 +23,8 @@ doc:
   
   The following options are supported:
   
+  - 'dryrun': Marker; if present then records will be read and returned but not committed to the
+    Folio
   - 'flag': string specifying the name of a marker tag to apply to the new records as a flag
   - 'log': Boolean indicating whether log entries should be made for each imported record
   - 'template': A CSV template for supplemental columns; see `csvReadRecs`
@@ -65,6 +67,7 @@ doc:
      specified, imported sites receive it as a marker tag as well.
   2. All columns except 'siteName' are optional. 
   3. If the time zone 'tz' is missing, the new site will inherit the project's time zone.
+     (Determining time zone based on location is not supported at this time.)
   4. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
      for errors.
 src:
@@ -148,9 +151,143 @@ src:
       end
 
       // Commit
-      addRec("Importing site " + row.dis, row)
+      if (opts.has("dryrun")) do
+        return addRec("Importing weather location " + row.dis, row)
+      else do
+        return row
+      end
     end
 
+  end
+---
+name:csvImportWeather
+func
+doc:
+  Imports weather location records from CSV data. Intended for use in tailored CSV import scripts.
+
+  Parameters
+  ----------
+  
+  - **uri:** The URI of the file to read
+  - **opts:** A dict of control options; see *Options*
+  
+  Returns
+  -------
+  
+  A grid of imported weather location records.
+  
+  Options
+  -------
+  
+  The following options are supported:
+  
+  - 'dryrun': Marker; if present then records will be read and returned but not committed to the
+    Folio
+  - 'flag': String specifying the name of a marker tag to apply to the new records as a flag
+  - 'log': Boolean indicating whether log entries should be made for each imported record
+  - 'template': A CSV template for supplemental columns; see `csvReadRecs`
+  
+  If supplied, 'template' will be merged with the default template (see *Details*). In the case of
+  conflicts, the user-specified template entries take precedence.
+  
+  In addition, valid options for `csvReadRecs` may be supplied and will be passed through.
+  
+  Details
+  -------
+  
+  This function expects a CSV file with some or all of the following columns:
+
+    Tag         | Type   | Description
+    ----------- | ------ | ------------------------------------------
+    dis         | string | Name / label of weather location
+    weatherTags | string | Arbitrary list of tags to apply using Axon
+    geoCity     | string | City
+    geoCoord    | coord  | Geographic coordinates
+    geoState    | string | State / province
+    geoCountry  | string | Country code
+    tz          | string | String designation for location time zone
+    
+  This default template can be modified using the 'template' option. Other arbitrary column names
+  are also supported and will import as strings. See `csvReadRecs` for the low-level import
+  function.
+  
+  Notes
+  -----
+  
+  1. All imported weather locations receive the 'weather' tag automatically. If an import 'flag'
+     option is specified, imported weather locations receive it as a marker tag as well.
+  2. All columns except 'dis' are optional, although SkySpark may fail to function properly if
+     geographic location is not included.
+  3. If the time zone 'tz' is missing, the new weather location will inherit the project's time
+     zone. (Determining time zone based on location is not supported at this time.)
+  4. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
+     for errors.
+src:
+  (uri, opts:{}) => do
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Setup
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+
+    // Default options
+    opts = merge({log:true}, opts)
+
+    // Tags to add
+    addTags: {weather}
+    if (opts.has("flag")) addTags = addTags.set(opts->flag, marker())
+
+    // CSV Template
+    // Template
+    template: {
+      dis:"string",
+      weatherTags:"taglist",
+      geoCity:"string",
+      geoCoord:"coord",
+      geoState:"string",
+      geoCountry:"string"
+    }
+    if (opts.has("template")) template = merge(template, opts->template)
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Functions
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Add new record
+    addRec: (msg, tags) => do
+
+      // Remove null tags
+      tags = tags.findAll v => v != null
+
+      // Log an info message
+      if (opts->log) logInfo("import", msg)
+
+      // Add as new record to the database
+      commit(diff(null, tags, {add}))
+    end
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Main
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Read from CSV
+    d: csvReadRecs(uri, template, opts)
+    
+    // Process records and commit to database
+    d.map() row => do
+      // Add universal tags
+      row = union(row, addTags)
+
+      // Set timezone (if missing)
+      if (row.missing("tz")) row = row.set("tz", now().tz)
+
+      // Commit
+      if (opts.has("dryrun")) do
+        return addRec("Importing weather location " + row.dis, row)
+      else do
+        return row
+      end
+    end
+    
   end
 ---
 name:csvReadRecs
@@ -178,9 +315,9 @@ doc:
   
   The following options are supported:
   
-  - 'sep': tag and value separator to use for '"taglist"' and '"coord"' data types; see *Details*
   - 'delimiter': column delimiter character; passed through to `ioReadCsv`
   - 'noHeader': passed through to `ioReadCsv`
+  - 'sep': tag and value separator to use for '"taglist"' and '"coord"' data types; see *Details*
   
   The default value of 'sep' is '" "', which maps to any whitespace character. 'sep' must differ
   from the column 'delimiter' (by default, '","') or parsing will fail.
@@ -239,7 +376,7 @@ src:
     // Parsing functions
     parseTags: (s) => delimConvert(s,opts->sep,",").stringToDict
     parseRef2: (r) => if (r.startsWith("@")) parseRef(r[1..-1]) else parseRef(r)
-    parseCoord: (c) => eval("coord(" + delimConvert(s,opts->sep,",") + ")")
+    parseCoord: (c) => eval("coord(" + delimConvert(c,opts->sep,",") + ")")
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Main
