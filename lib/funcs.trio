@@ -2,6 +2,153 @@
 // All Rights Reserved
 
 ---
+name:csvImportEquips
+func
+doc:
+  Imports equip records from CSV data. Intended for use in tailored CSV import scripts.
+
+  Parameters
+  ----------
+  
+  - **uri:** The URI of the file to read
+  - **opts:** A dict of control options; see *Options*
+  
+  Returns
+  -------
+  
+  A grid of imported equip records.
+  
+  Options
+  -------
+  
+  The following options are supported:
+  
+  - 'dryrun': Marker; if present then records will be read and returned but not committed to the
+    Folio
+  - 'flag': string specifying the name of a marker tag to apply to the new records as a flag
+  - 'log': Boolean indicating whether log entries should be made for each imported record
+  - 'template': A CSV template for supplemental columns; see `csvReadRecs`
+  
+  If supplied, 'template' will be merged with the default template (see *Details*). In the case of
+  conflicts, the user-specified template entries take precedence.
+  
+  In addition, valid options for `csvReadRecs` may be supplied and will be passed through.
+  
+  Details
+  -------
+  
+  This function expects a CSV file with some or all of the following columns:
+  
+    Tag        | Type    | Description
+    ---------- | ------- | ------------------------------------------
+    equipName  | string  | Name of equip; used to set 'navName'
+    equipTags  | taglist | Arbitrary list of tags to apply using Axon
+    siteName   | string  | Name of site; used to construct 'siteRef'
+               |         | by matching site name
+    siteRef    | ref     | Site reference; silently overrides
+               |         | 'siteName'
+  
+  This default template can be modified using the 'template' option. Other arbitrary column names
+  are also supported and will import as strings. See `csvReadRecs` for the low-level import
+  function.
+  
+  Notes
+  -----
+  
+  1. All imported equips receive the 'equip' tag automatically. If an import 'flag' option is
+     specified, imported equips receive it as a marker tag as well.
+  2. 'equipName' and either 'siteName' or 'siteRef' are required; other columns are optional.
+  3. If the function is unable to make a unique match to an existing site using 'siteName', it will
+     throw an error.
+  4. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
+     for errors.
+src:
+  (uri, opts:{}) => do
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Setup
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+
+    // Default options
+    opts = merge({log:true}, opts)
+
+    // Tags to add
+    addTags: {equip}
+    if (opts.has("flag")) addTags = addTags.set(opts->flag, marker())
+
+    // CSV Template
+    template: {
+      equipName:"string",
+      equipTags:"taglist",
+      siteName:"string",
+      siteRef:"ref"
+    }
+    if (opts.has("template")) template = merge(template, opts->template)
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Functions
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Add new record
+    addRec: (msg, tags) => do
+
+      // Remove null tags
+      tags = tags.findAll v => v != null
+
+      // Log an info message
+      if (opts->log) logInfo("import", msg)
+
+      // Add as new record to the database
+      commit(diff(null, tags, {add}))
+    end
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Main
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Read from CSV
+    d: csvReadRecs(uri, template, opts)
+
+    // Process records and commit to database
+    d.map() row => do
+      // Add universal tags
+      row = union(row, addTags)
+
+      // Map site
+      if (row.has("siteRef")) do
+        siteMatch: readById(row->siteRef, false)
+        if (siteMatch == null) throw "Matching site record not found."
+        row = row.remove("siteName")
+
+      end else if (row.has("siteName")) do
+        siteMatch: readAll(site and dis==row["siteName"])
+        if (siteMatch.size != 1) do
+          throw "Could not make a unique match for site " + row["siteName"] +
+            "; found " + siteMatch.size + " records."
+        else do
+          row = row.set("siteRef", siteMatch.first->id).remove("siteName")
+        end
+        
+      end else do
+        throw "Either 'siteName' or 'siteRef' is required."
+      end
+      
+      // Set equip navName and disMacro
+      row = row
+        .set("navName", row["equipName"])
+        .set("disMacro", "\$siteRef \$navName")
+        .remove("equipName")
+
+      // Commit
+      if (opts.has("dryrun")) do
+        return row
+      else do
+        return addRec("Importing equip " + row.dis, row)
+      end
+    end
+
+  end
+---
 name:csvImportSites
 func
 doc:
@@ -44,12 +191,12 @@ doc:
     siteName    | string  | Name of site; converted to 'dis' tag
     siteTags    | taglist | Arbitrary list of tags to apply using Axon
     area        | number  | Area of site
-    tz          | string  | String designation for site time zone
     geoAddr     | string  | Street address
     geoCity     | string  | City
     geoState    | string  | State / province
     geoCountry  | string  | Country code
     geoCoord    | coord   | Latitude/longitude in decimal format
+    tz          | string  | String designation for site time zone
     weatherName | string  | Weather location name; used to construct
                 |         | 'weatherRef' by matching weather record
                 |         | description
@@ -68,7 +215,9 @@ doc:
   2. All columns except 'siteName' are optional. 
   3. If the time zone 'tz' is missing, the new site will inherit the project's time zone.
      (Determining time zone based on location is not supported at this time.)
-  4. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
+  4. If the function is unable to make a unique match to an existing weather location using
+     'weatherName', it will throw an error.  
+  5. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
      for errors.
 src:
   (uri, opts:{}) => do
@@ -197,15 +346,15 @@ doc:
   
   This function expects a CSV file with some or all of the following columns:
 
-    Tag         | Type   | Description
-    ----------- | ------ | ------------------------------------------
-    dis         | string | Name / label of weather location
-    weatherTags | string | Arbitrary list of tags to apply using Axon
-    geoCity     | string | City
-    geoCoord    | coord  | Geographic coordinates
-    geoState    | string | State / province
-    geoCountry  | string | Country code
-    tz          | string | String designation for location time zone
+    Tag         | Type    | Description
+    ----------- | ------- | ------------------------------------------
+    dis         | string  | Name / label of weather location
+    weatherTags | taglist | Arbitrary list of tags to apply using Axon
+    geoCity     | string  | City
+    geoCoord    | coord   | Geographic coordinates
+    geoState    | string  | State / province
+    geoCountry  | string  | Country code
+    tz          | string  | String designation for location time zone
     
   This default template can be modified using the 'template' option. Other arbitrary column names
   are also supported and will import as strings. See `csvReadRecs` for the low-level import
