@@ -152,9 +152,9 @@ src:
 
       // Commit
       if (opts.has("dryrun")) do
-        return addRec("Importing weather location " + row.dis, row)
-      else do
         return row
+      else do
+        return addRec("Importing weather location " + row.dis, row)
       end
     end
 
@@ -282,9 +282,9 @@ src:
 
       // Commit
       if (opts.has("dryrun")) do
-        return addRec("Importing weather location " + row.dis, row)
-      else do
         return row
+      else do
+        return addRec("Importing weather location " + row.dis, row)
       end
     end
     
