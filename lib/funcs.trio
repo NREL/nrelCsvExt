@@ -149,6 +149,195 @@ src:
 
   end
 ---
+name:csvImportPoints
+func
+doc:
+  Imports point records from CSV data. Intended for use in tailored CSV import scripts.
+
+  Parameters
+  ----------
+  
+  - **uri:** The URI of the file to read
+  - **opts:** A dict of control options; see *Options*
+  
+  Returns
+  -------
+  
+  A grid of imported point records.
+  
+  Options
+  -------
+  
+  The following options are supported:
+  
+  - 'dryrun': Marker; if present then records will be read and returned but not committed to the
+    Folio
+  - 'flag': string specifying the name of a marker tag to apply to the new records as a flag
+  - 'log': Boolean indicating whether log entries should be made for each imported record
+  - 'template': A CSV template for supplemental columns; see `csvReadRecs`
+  
+  If supplied, 'template' will be merged with the default template (see *Details*). In the case of
+  conflicts, the user-specified template entries take precedence.
+  
+  In addition, valid options for `csvReadRecs` may be supplied and will be passed through.
+  
+  Details
+  -------
+  
+  This function expects a CSV file with some or all of the following columns:
+
+    Tag        | Type    | Description
+    ---------- | ------- | ------------------------------------------
+    pointName  | string  | Name of point; used to set 'navName'
+    pointTags  | taglist | Arbitrary list of tags to apply using Axon
+    siteName   | string  | Name of site; used to construct 'siteRef'
+               |         | by matching site name
+    siteRef    | ref     | Site reference; silently overrides
+               |         | 'siteName'
+    equipName  | string  | Name of equip; used to construct 'equipRef'
+               |         | by matching equip name
+    equipRef   | ref     | Equip reference; silently overrides
+               |         | 'equipName'
+    kind       | string  | Kind of point (e.g. "Number" or "Bool");
+               |         | must match SkySpark kind
+    unit       | string  | Unit for point data (e.g. "kW")
+  
+  This default template can be modified using the 'template' option. Other arbitrary column names
+  are also supported and will import as strings. See `csvReadRecs` for the low-level import
+  function.
+  
+  Notes
+  -----
+  
+  1. All imported points receive the 'point', 'his', and 'analytics' tags automatically. If an
+     import 'flag' option is specified, imported points receive it as a marker tag as well.
+  2. The following columns are required:
+     - 'pointName'
+     - Either 'equipName' or 'equipRef'
+     - Either 'siteName' or 'siteRef'
+     Other columns are optional.
+  3. If the time zone 'tz' is missing, the new point will inherit the parent site's time zone (if
+     any) or else the project time zone.
+  4. If the function is unable to make a unique match to an existing site using 'siteName' or to an
+     existing equip using 'equipName' , it will throw an error.
+  5. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
+     for errors.
+src:
+  (uri, opts:{}) => do
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Setup
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+
+    // Default options
+    opts = merge({log:true}, opts)
+
+    // Tags to add
+    addTags: {point, his, analytics}
+    if (opts.has("flag")) addTags = addTags.set(opts->flag, marker())
+
+    // CSV Template
+    template: {
+      pointName:"string",
+      pointTags:"taglist",
+      siteName:"string",
+      siteRef:"ref",
+      equipName:"string",
+      equipRef:"ref",
+      kind:"string",
+      unit:"string"
+    }
+    if (opts.has("template")) template = merge(template, opts->template)
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Functions
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Add new record
+    addRec: (msg, tags) => do
+
+      // Remove null tags
+      tags = tags.findAll v => v != null
+
+      // Log an info message
+      if (opts->log) logInfo("import", msg)
+
+      // Add as new record to the database
+      commit(diff(null, tags, {add}))
+    end
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Main
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Read from CSV
+    d: csvReadRecs(uri, template, opts)
+
+    // Process records and commit to database
+    d.map() row => do
+      // Add universal tags
+      row = union(row, addTags)
+
+      // Map site
+      if (row.has("siteRef")) do
+        siteMatch: readById(row->siteRef, false)
+        if (siteMatch == null) throw "Matching site record not found."
+        row = row.remove("siteName")
+
+      end else if (row.has("siteName")) do
+        siteMatch: readAll(site and dis==row["siteName"])
+        if (siteMatch.size != 1) do
+          throw "Could not make a unique match for site " + row["siteName"] +
+            "; found " + siteMatch.size + " records."
+        else do
+          row = row.set("siteRef", siteMatch.first->id).remove("siteName")
+        end
+
+      end else do
+        throw "Either 'siteName' or 'siteRef' is required."
+      end
+      
+      // Map equip
+      if (row.has("equipRef")) do
+        equipMatch: readById(row->equipRef, false)
+        if (equipMatch == null) throw "Matching equip record not found."
+        row = row.remove("equipName")
+
+      end else if (row.has("equipName")) do
+        equipMatch: readAll(equip and siteRef==row->siteRef and navName==row["equipName"])
+        if (equipMatch.size != 1) do
+          throw "Could not make a unique match for equip " + row["equipName"] +
+            "; found " + equipMatch.size + " records."
+        else do
+          row = row.set("equipRef", equipMatch.first->id).remove("equipName")
+        end
+
+      end else do
+        throw "Either 'equipName' or 'equipRef' is required."
+      end
+
+      // Set point navName and disMacro
+      row = row
+        .set("navName", row["pointName"])
+        .set("disMacro", "\$equipRef \$navName")
+        .remove("pointName")
+        
+      // Set timezone (if missing)
+      if (row.missing("tz")) do
+        timezone: readById(row->siteRef)["tz"]
+        if (timezone==null) timezone = now().tz
+        row = row.set("tz", timezone)
+      end
+
+      // Commit
+      if (opts.has("dryrun")) do
+        return row
+      else do
+        return addRec("Importing point " + row.dis, row)
+      end
+    end
+  end
+---
 name:csvImportSites
 func
 doc:
@@ -243,8 +432,8 @@ src:
       geoState:"string",
       geoCountry:"string",
       geoCoord:"coord",
-      weatherRef:"ref",
-      weatherName:"string"
+      weatherName:"string",
+      weatherRef:"ref"
     }
     if (opts.has("template")) template = merge(template, opts->template)
 
@@ -437,6 +626,168 @@ src:
       end
     end
     
+  end
+---
+name:csvImportWeatherPoints
+func
+doc:
+  Imports weather point records from CSV data. Intended for use in tailored CSV import scripts.
+
+  Parameters
+  ----------
+  
+  - **uri:** The URI of the file to read
+  - **opts:** A dict of control options; see *Options*
+  
+  Returns
+  -------
+  
+  A grid of imported weather point records.
+  
+  Options
+  -------
+  
+  The following options are supported:
+  
+  - 'dryrun': Marker; if present then records will be read and returned but not committed to the
+    Folio
+  - 'flag': string specifying the name of a marker tag to apply to the new records as a flag
+  - 'log': Boolean indicating whether log entries should be made for each imported record
+  - 'template': A CSV template for supplemental columns; see `csvReadRecs`
+  
+  If supplied, 'template' will be merged with the default template (see *Details*). In the case of
+  conflicts, the user-specified template entries take precedence.
+  
+  In addition, valid options for `csvReadRecs` may be supplied and will be passed through.
+  
+  Details
+  -------
+  
+  This function expects a CSV file with some or all of the following columns:
+
+    Tag              | Type    | Description
+    ---------------- | ------- | ------------------------------------------
+    weatherPointName | string  | Name of weatherPoint; converted to 'dis'
+    weatherPointTags | taglist | Arbitrary list of tags to apply using Axon
+    weatherName      | string  | Weather location name; used to construct
+                     |         | 'weatherRef' by matching weather record
+                     |         | description
+    weatherRef       | ref     | Weather location reference; silently
+                     |         | overrides 'weatherName'
+    kind             | string  | Kind of weatherPoint (e.g. "Number" or 
+                     |         | "Bool"); must match SkySpark kind
+    unit             | string  | Unit for weatherPoint data (e.g. "°F")
+  
+  This default template can be modified using the 'template' option. Other arbitrary column names
+  are also supported and will import as strings. See `csvReadRecs` for the low-level import
+  function.
+  
+  Notes
+  -----
+  
+  1. All imported weather points receive the 'point', 'weatherPoint', 'his', and 'analytics' tags
+     automatically. If an import 'flag' option is specified, imported points receive it as a marker
+     tag as well.
+  2. 'weatherPointName' and either 'weatherName' or 'weatherRef' are required; other columns are
+     optional.
+  3. If the time zone 'tz' is missing, the new weather point will inherit the parent weather
+     record's time zone (if any) or else the project time zone.
+  4. If the function is unable to make a unique match to an existing weather record using
+     'weatherName', it will throw an error.
+  5. Parsing failures will throw an error. In the event of a parsing failure, check the CSV data
+     for errors.
+src:
+  (uri, opts:{}) => do
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Setup
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+
+    // Default options
+    opts = merge({log:true}, opts)
+
+    // Tags to add
+    addTags: {point, weatherPoint, his, analytics}
+    if (opts.has("flag")) addTags = addTags.set(opts->flag, marker())
+
+    // CSV Template
+    template: {
+      weatherPointName:"string",
+      weatherPointTags:"taglist",
+      weatherName:"string",
+      weatherRef:"ref",
+      kind:"string",
+      unit:"string"
+    }  
+    if (opts.has("template")) template = merge(template, opts->template)
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Functions
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Add new record
+    addRec: (msg, tags) => do
+
+      // Remove null tags
+      tags = tags.findAll v => v != null
+
+      // Log an info message
+      if (opts->log) logInfo("import", msg)
+
+      // Add as new record to the database
+      commit(diff(null, tags, {add}))
+    end
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Main
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Read from CSV
+    d: csvReadRecs(uri, template, opts)
+
+    // Process records and commit to database
+    d.map() row => do
+      // Add universal tags
+      row = union(row, addTags)
+
+      // Map weather location
+      if (row.has("weatherRef")) do
+        weatherMatch: readById(row->weatherRef, false)
+        if (weatherMatch == null) throw "Matching weather location record not found."
+        row = row.remove("weatherName")
+
+      end else if (row.has("weatherName")) do
+        weatherMatch: readAll(weather and dis==row["weatherName"])
+        if (weatherMatch.size != 1) do
+          throw "Could not make a unique match for weather location " + row["weatherName"] +
+            "; found " + weatherMatch.size + " records."
+        else do
+          row = row.set("weatherRef", weatherMatch.first->id).remove("weatherName")
+        end
+        
+      end else do
+        throw "Either 'weatherName' or 'weatherRef' is required."
+      end
+
+      // Set weather point description
+      row = row
+        .set("dis", row["weatherPointName"])
+        .remove("weatherPointName")
+
+      // Set timezone (if missing)
+      if (row.missing("tz")) do
+        timezone: readById(row->weatherRef)["tz"]
+        if (timezone==null) timezone = now().tz
+        row = row.set("tz", timezone)
+      end
+
+      // Commit
+      if (opts.has("dryrun")) do
+        return row
+      else do
+        return addRec("Importing point " + row.dis, row)
+      end
+    end
   end
 ---
 name:csvReadRecs
