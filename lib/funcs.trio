@@ -1206,7 +1206,10 @@ src:
 
       // Filter null and empty string input
       row = row.findAll() v => (v != null and v != "")
-
+      
+      // Handle empty rows
+      if (row.isEmpty) return null
+      
       // Parse tags
       row.each() (v,n) => do
         // Check for template
