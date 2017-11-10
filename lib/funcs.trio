@@ -149,6 +149,323 @@ src:
 
   end
 ---
+name: csvImportHistory
+func
+doc:
+  Imports time series data from a CSV file and writes it to point histories. Intended for use in
+  tailored CSV import scripts.
+
+  Parameters
+  ----------
+  
+  - **recs:** List or grid of point records which will receive the imported history
+  - **uri:** The URI of the file to read
+  - **opts:** A dict of control options; see *Options*
+  
+  Returns
+  -------
+  
+  A grid of points with new or modified history.
+  
+  Options
+  -------
+  
+  The following options are supported:
+  
+  - 'checked': Check parsing failures?
+    - If *true*, parsing failures will produce an error
+    - If *false* (default), parsing failures will only log a warning
+  - 'tsColumn': Name or index of the CSV time stamp column (default = "ts")
+  - 'tsPattern': String or list of strings specifying one or more patterns to use for parsing the
+    time stamps in the CSV data (default = "YYYY-MM-DD hh:mm:ss"); see `parseDateTime`
+  - 'tz': Time zone in which to interpret the time stamp (default = the project time zone)
+  
+  In addition, valid options for `ioReadCsv` may be supplied and will be passed through.
+  
+  Details
+  -------
+
+  Import control is provided by a set of tags attached to the target point records:
+  
+  - 'csvColumn': (Required) A string or number specifying the CSV column corresponding to the target
+    record:
+    - If the CSV file has column headers, 'csvColumn' must be a string that matches a column header.
+    - If the CSV file does not have headers (i.e. 'noHeader' option for `ioReadCsv`), then 
+      'csvColumn' may be either a string in the form "v#", where # is the column position, or an
+      integer that specifies the column position. Note that SkySpark is zero-indexed, i.e. the first 
+      column has position 0.
+  - 'csvUnit': String specifying the units of numeric CSV data. If 'csvUnit' is missing but SkySpark
+    'unit' is present, 'unit' will be used instead.
+  - 'csvCallback': Callback function to be applied to the CSV data; follows the same conventions as
+    [OnWrite]`ext-his::doc#onWrite` callbacks.
+  - 'csvConvert': Point value conversion as described in [Point Conversion]`ext-point::doc#convert`
+    to be applied to the CSV data.
+  - 'csvRollupInterval': Number that defines a rollup interval for the CSV data.
+  - 'csvRollupFunc': String that defines a rollup function for the CSV data.
+  
+  Each record in **recs** must have the 'csvColumn' tag. The other tags are optional, but provide a
+  flexible framework for parsing and modifying the imported CSV data prior to writing history to the
+  target points. The key to properly specifying these tags to achieve a desired outcome is
+  understanding the order of operations that occur on data import. The import workflow proceeds as
+  follows:
+  
+  1. Raw data is read from **uri**.
+  2. The raw data is filtered for each point in **recs**:
+     - The 'tsColumn' option gives the time stamp column.
+     - The point's 'csvColumn' tag gives the value column.
+  3. Time stamps are parsed according to the 'tsPattern' option.
+  4. Values are parsed according to the point's 'kind' tag and assigned units according to the
+     'csvUnit' tag (if specified).
+  5. If the point has a 'csvCallback' tag, the function it specifies is applied to the imported
+     data.
+  6. If the point has a 'csvConvert' tag, the point conversion it specifies is applied to the
+     imported data using the `pointConvert` function.
+  7. If the point has a 'csvRollupInterval' tag, the data are rolled up to the specified interval
+     using `hisRollup` with the rollup function specified by the 'csvRollupFunc' tag. If the
+     'csvRollupFunc' tag is missing, then `hisRollupAuto` is used instead.
+  8. Any rows with time stamps that overlap with the point's existing history (i.e. time stamps
+     prior to the point's 'hisEnd' tag) are dropped from the data set.
+  9. Time stamps are converted to the point's time zone and numeric values are converted to the
+     point's SkySpark unit.
+  10. The data are written to SkySpark history (which triggers the [OnWrite]`ext-his::doc#onWrite`
+      action if the `hisOnWrite` tag is present).
+  
+  Notes
+  -----
+  
+  1. At present, only numeric and Boolean 'kind''s are supported.
+  2. For CSV data without headers, include the 'noHeader' marker tag in **opts** dict.
+  3. If the 'tsPattern' option is a list, then the function will try to parse the timestamp using
+     each specified pattern in the list in order until either one is successful or they have all
+     been exhausted.
+  4. Any records which cannot be interpreted correctly as their associated data type are dropped,
+     with a warning.
+  5. This function is safe to call within a job in order to automatically keep existing point
+     histories up to date.
+src:
+  (recs, uri, opts:{}) => do
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Options
+    ////////////////////////////////////////////////////////////////////////////////////////////////  
+
+    // Default options
+    opts = merge({tsColumn:"ts", tsPattern:"YYYY-MM-DD hh:mm:ss", tz:now().tz, checked:false}, opts)
+
+    // Valid pass-through options for ioReadCsv()
+    ioOpts: opts.findAll() (v, n) => n.in(["delimiter", "noHeader"])
+
+    // Convert tsPattern to pattern list
+    if ( not(isList(opts->tsPattern)) ) opts = opts.set("tsPattern", [opts->tsPattern])
+
+    // Extract checked option
+    checked: opts->checked
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Parse Booleans from Numbers or Text
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Map CSV column headers
+    mapCsvColName: n => if (ioOpts.has("noHeader") and n.isNumber) ("v" + n) else n.toTagName
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Parse Date/Time Using Multiple Patterns
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // 
+    myParseDateTime: (x, pattern, tz, checked:checked) => do
+      // Try each pattern until one succeeds
+      ts: pattern.eachWhile() (pat) => x.parseDateTime(pat, tz, false)
+
+      // If none was successful, throw an exception
+      if (ts == null and checked) do
+        throw "Unable to parse date/time '" + x + "' using any of the specified patterns: " + pattern
+      end
+
+      // Return
+      return ts
+    end
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Parse Booleans from Numbers or Text
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    myParseBool: (x, checked:checked) => do
+      // First, try parsing as a Boolean
+      y: x.lower.parseBool(false)
+
+      // Next, try parsing as a number
+      if (y == null) do
+        y = x.parseNumber(false)
+        if (y != null) y = y != 0
+      end
+
+      // If nothing was successful, throw an exception
+      if (y == null and checked) do
+        throw "Unable to parse '" + x + "' as boolean."
+      end
+
+      // Return
+      return y
+    end
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Write Point History to Folio
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    writePointHis: (point, timeCol, valCol, data) => do
+      // Drop all but the two columns we need
+      data = data.keepCols([timeCol, valCol])
+
+      // If data column is missing, terminate early
+      if (not (data.has(valCol))) return null
+
+      // Rename columns
+      data = data.renameCol(timeCol, "ts")
+      data = data.renameCol(valCol, "val")
+
+      // Drop rows which have empty timestamp or data
+      data = data.findAll() row => row.has("ts") and row.has("val")
+
+      // Parse according to point metadata
+      if (point->kind=="Number" and point.has("csvUnit")) do
+        // Convert to number w/ appropriate units
+        data = data.map row => {
+          ts: row->ts.myParseDateTime(opts->tsPattern, opts->tz, checked),
+          val: row->val.parseNumber(checked).as(point->csvUnit)
+        }
+
+      else if (point->kind=="Number") do
+        // Convert to unitless number
+        data = data.map row => {
+          ts: row->ts.myParseDateTime(opts->tsPattern, opts->tz, checked),
+          val: row->val.parseNumber(checked)
+        }
+
+      else if (point->kind=="Bool") do
+        // Convert to boolean status
+        data = data.map row => {
+          ts: row->ts.myParseDateTime(opts->tsPattern, opts->tz, checked),
+          val: row->val.myParseBool(checked)
+        }
+        
+      else do
+        // Unsupported kind
+        throw "Kind \"" + point->kind + "\" is not supported."
+
+      end
+
+      // Drop incorrectly parsed rows (with a warning)
+      before: size(data)
+      data = data.findAll row => row.has("ts") and row.has("val")
+      after: size(data)
+      if (after < before) do
+        logWarn("csvImportHistory", "Unable to parse " + (before - after) + " rows of data for column '" + valCol + "'.")
+      end
+
+      // Sort on timestamp
+      data = data.sort("ts")
+
+      // Apply callback function
+      if (point.has("csvCallback")) do
+        // Get callback function
+        cb: eval("x:" + func(point->csvCallback)->name)
+
+        // Apply transformation
+        data = cb(data, point)
+      end
+
+      // Apply value conversion
+      if (point.has("csvConvert")) do
+        // Apply point conversion
+        data = data.hisMap() v => pointConvert(point, point->csvConvert, v)
+      end
+
+      // Apply rollup function
+      if (point.has("csvRollupInterval")) do
+        // Rollup function
+        if (point.has("csvRollupFunc")) do
+          // User-specified rollup function
+          data = data.hisRollup(eval("x:"+point->csvRollupFunc), point->csvRollupInterval)
+        else do
+          // Automatic rollup function
+          data = data
+            .addColMeta("val", point)
+            .hisRollupAuto(point->csvRollupInterval)
+        end
+
+        // Drop rows for which rollup function produced null data
+        data = data.findAll row => row.has("ts") and row.has("val")
+
+        // Return if empty (no new data)
+        if (data.isEmpty) return null
+      end
+
+      // Convert from CSV units to SkySpark units
+      if (point->kind=="Number" and point.has("unit")) do
+        data = data.map() row => row.set("val", (row->val).to(point->unit))
+      end
+
+      // Convert from input timezone to point timezone
+      if (point.has("tz")) do
+        data = data.map() row => row.set("ts", (row->ts).toTimeZone(point->tz))
+      end
+
+      // Write history to point
+      data.hisWrite(point)
+
+      // Return processed point id
+      return {id:point["id"]}
+    end
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Main
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Timestamp column name
+    tsColumn: opts->tsColumn.mapCsvColName
+
+    // Valid points of interest
+    p: recs.toRecList.findAll() x => x.has("csvColumn")
+
+    // Valid CSV headers = timestamp + CSV column names from point metadata
+    h: [tsColumn].addAll(p.map() point => mapCsvColName(point->csvColumn))
+
+    // Read the data and subset to needed columns
+    try do
+      d: ioReadCsv(uri, ioOpts).keepCols(h)
+    catch (ex) do
+      // If error, log, and rethrow error
+      logErr("csvImportHistory", "Error reading URI: " + uri)
+      throw (ex)
+    end
+
+    // Extract relevant data for each rec and store to Folio
+    errorFound: false
+    p = p.map() point => do
+      // Catch and log any errors
+      try do
+        point = writePointHis(point, tsColumn, mapCsvColName(point->csvColumn), d)
+      end catch (ex) do
+        logErr(
+          "csvImportHistory", "Error writing history for record " + point->id + "." +
+          "Error message was: " + ex->dis
+        )
+        errorFound = true
+        return null
+      end
+      return point
+    end
+
+    // Error check
+    if (errorFound) throw "Errors occured while importing CSV history from `" + uri + "`. See Log."
+
+    // Re-read and return list of all affected recs
+    p = p.removeNull
+    if (p.isEmpty) do
+      return null
+    else do
+      return p.map() rec => readById(rec->id)
+    end
+  end
+---
 name:csvImportPoints
 func
 doc:

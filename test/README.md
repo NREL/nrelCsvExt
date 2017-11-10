@@ -30,7 +30,7 @@ csvImportWeatherPoints(`io/test-weatherPoints.csv`, {flag:"imported"})
 csvImportSites(`io/test-sites.csv`, {flag:"imported"})
 csvImportEquips(`io/test-equips.csv`, {flag:"imported"})
 csvImportPoints(`io/test-points.csv`, {flag:"imported"})
-readAll(point and imported and csvColumn).csvImportHistory(`io/test-his.csv`)
+readAll(point and imported).csvImportHistory(`io/test-his.csv`, {tsColumn:"Timestamp"})
 ```
 
 ### Notes ###
