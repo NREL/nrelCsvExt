@@ -1156,6 +1156,7 @@ doc:
   - 'ref': parsed as a reference
   - 'string': parsed as a string
   - 'taglist': parsed as a tag list using Axon; see below
+  - 'uri': parsed as a uri
   
   Any other value in the template will throw an error when the corresponding column is parsed, while
   missing columns are parsed as strings by default. Data type values are not case sensitive.
@@ -1192,7 +1193,6 @@ src:
     
     // Parsing functions
     parseTags: (s) => delimConvert(s,opts->sep,",").stringToDict
-    parseRef2: (r) => if (r.startsWith("@")) parseRef(r[1..-1]) else parseRef(r)
     parseCoord: (c) => eval("coord(" + delimConvert(c,opts->sep,",") + ")")
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1234,6 +1234,8 @@ src:
             tags = tags.set(n, v)
           else if (template[n].lower == "taglist") do
             parseTags(v).each((vv,nn) => tags = tags.set(nn,vv))
+          else if (template[n].lower == "uri") do
+            tags = tags.set(n, parseUri(v))
           else do
             throw "Invalid field type for field " + n + ": " + template[n]
           end
