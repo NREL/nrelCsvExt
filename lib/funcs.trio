@@ -1163,7 +1163,7 @@ doc:
   Coordinates ( '"coord"' data type) are processed using the `coord` function. The 'sep' option
   specifies the seperator between the two arguments of 'coord'. Similarly, tag lists ( '"taglist"'
   data type) are processed as dicts using Axon, with 'sep' interpreted as separating the tags in
-  the dict. If needed in tag values, 'sep' can be protected by enclosing in quotes or escaping
+  the dict. If needed in tag values, 'sep' can be protected by enclosing in quotes or escaped
   with '\'; see `delimConvert` for more information.
   
   Notes
@@ -1192,7 +1192,6 @@ src:
     
     // Parsing functions
     parseTags: (s) => delimConvert(s,opts->sep,",").stringToDict
-    parseRef2: (r) => if (r.startsWith("@")) parseRef(r[1..-1]) else parseRef(r)
     parseCoord: (c) => eval("coord(" + delimConvert(c,opts->sep,",") + ")")
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
