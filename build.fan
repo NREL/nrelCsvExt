@@ -26,7 +26,7 @@ class Build : BuildPod
                 "license.name":    "Commercial",
                 "skyspark.docExt": "true",
               ]
-    depends = ["sys 1.0", "axon 3.0", "ioExt 3.0", "utilityExt 1.1"]
+    depends = ["sys 1.0", "axon 3.0", "ioExt 3.0", "utilityExt 1.1+"]
     resDirs = [`locale/`,
                `lib/`]
     index   =
