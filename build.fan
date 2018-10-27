@@ -14,7 +14,7 @@ class Build : BuildPod
   {
     podName = "csvExt"
     summary = "CSV Data Import Functions"
-    version = Version("0.9.1")
+    version = Version("0.9.2")
     meta    = [
                 "ext.name":        "csv",
                 "ext.icon24":      "fan://frescoRes/img/iconMissing24.png",
@@ -26,7 +26,7 @@ class Build : BuildPod
                 "license.name":    "Commercial",
                 "skyspark.docExt": "true",
               ]
-    depends = ["sys 1.0", "axon 3.0", "ioExt 3.0", "utilityExt 1.1+"]
+    depends = ["sys 1.0", "axon 3.0", "ioExt 3.0", "nrelUtilityExt 1.1+"]
     resDirs = [`locale/`,
                `lib/`]
     index   =
