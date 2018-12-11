@@ -692,22 +692,24 @@ doc:
   
   This function expects a CSV file with some or all of the following columns:
 
-    Tag         | Type    | Description
-    ----------- | ------- | ------------------------------------------
-    siteName    | string  | Name of site; converted to 'dis' tag
-    siteTags    | taglist | Arbitrary list of tags to apply using Axon
-    area        | number  | Area of site
-    geoAddr     | string  | Street address
-    geoCity     | string  | City
-    geoState    | string  | State / province
-    geoCountry  | string  | Country code
-    geoCoord    | coord   | Latitude/longitude in decimal format
-    tz          | string  | String designation for site time zone
-    weatherName | string  | Weather location name; used to construct
-                |         | 'weatherRef' by matching weather record
-                |         | description
-    weatherRef  | ref     | Weather location reference; silently
-                |         | overrides 'weatherName'
+    Tag             | Type    | Description
+    --------------- | ------- | ------------------------------------------
+    siteName        | string  | Name of site; converted to 'dis' tag
+    siteTags        | taglist | Arbitrary list of tags to apply using Axon
+    area            | number  | Area of site
+    geoAddr         | string  | Street address
+    geoCity         | string  | City
+    geoState        | string  | State / province
+    geoCountry      | string  | Country code
+    geoCoord        | coord   | Latitude/longitude in decimal format
+    primaryFunction | string  | The primary function of the building
+    tz              | string  | String designation for site time zone
+    weatherName     | string  | Weather location name; used to construct
+                    |         | 'weatherRef' by matching weather record
+                    |         | description
+    weatherRef      | ref     | Weather location reference; silently
+                    |         | overrides 'weatherName'
+    yearBuilt       | number  | Year in which the building was constructed
     
   This default template can be modified using the 'template' option. Other arbitrary column names
   are also supported and will import as strings. See `csvReadRecs` for the low-level import
@@ -749,8 +751,10 @@ src:
       geoState:"string",
       geoCountry:"string",
       geoCoord:"coord",
+      primaryFunction:"string",
       weatherName:"string",
-      weatherRef:"ref"
+      weatherRef:"ref",
+      yearBuilt:"number"
     }
     if (opts.has("template")) template = merge(template, opts->template)
 
