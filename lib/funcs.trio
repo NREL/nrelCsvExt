@@ -455,7 +455,7 @@ src:
     end
 
     // Error check
-    if (errorFound) throw "Errors occured while importing CSV history from `" + uri + "`. See Log."
+    if (errorFound) throw "Errors occurred while importing CSV history from `" + uri + "`. See Log."
 
     // Re-read and return list of all affected recs
     p = p.removeNull
