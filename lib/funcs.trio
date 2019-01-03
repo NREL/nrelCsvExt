@@ -415,6 +415,12 @@ src:
       if (point.has("tz")) do
         data = data.map() row => row.set("ts", (row->ts).toTimeZone(point->tz))
       end
+      
+      // Drop any data for which the point already has history
+      if (point.has("hisEnd")) data = data.findAll() row => row->ts > point->hisEnd
+
+      // Return if empty (no new data)
+      if (data.isEmpty) return null
 
       // Write history to point
       data.hisWrite(point)
