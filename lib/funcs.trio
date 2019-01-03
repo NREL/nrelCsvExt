@@ -175,7 +175,8 @@ doc:
   - 'checked': Check parsing failures?
     - If *true*, parsing failures will produce an error
     - If *false* (default), parsing failures will only log a warning
-  - 'tsColumn': Name or index of the CSV time stamp column (default = "ts")
+  - 'tsColumn': Name or index of the CSV time stamp column (default = "ts");
+    see *Notes*
   - 'tsPattern': String or list of strings specifying one or more patterns to use for parsing the
     time stamps in the CSV data (default = "YYYY-MM-DD hh:mm:ss"); see `parseDateTime`
   - 'tz': Time zone in which to interpret the time stamp (default = the project time zone)
@@ -211,23 +212,25 @@ doc:
   
   1. Raw data is read from **uri**.
   2. The raw data is filtered for each point in **recs**:
-     - The 'tsColumn' option gives the time stamp column.
+     - The 'tsColumn' option gives the time stamp column(s).
      - The point's 'csvColumn' tag gives the value column.
-  3. Time stamps are parsed according to the 'tsPattern' option.
-  4. Values are parsed according to the point's 'kind' tag and assigned units according to the
+  3. If the time stamp is composite (made of multiple columns), then time stamps are
+     consolidated into a single column.
+  4. Time stamps are parsed according to the 'tsPattern' option.
+  5. Values are parsed according to the point's 'kind' tag and assigned units according to the
      'csvUnit' tag (if specified).
-  5. If the point has a 'csvCallback' tag, the function it specifies is applied to the imported
+  6. If the point has a 'csvCallback' tag, the function it specifies is applied to the imported
      data.
-  6. If the point has a 'csvConvert' tag, the point conversion it specifies is applied to the
+  7. If the point has a 'csvConvert' tag, the point conversion it specifies is applied to the
      imported data using the `pointConvert` function.
-  7. If the point has a 'csvRollupInterval' tag, the data are rolled up to the specified interval
+  8. If the point has a 'csvRollupInterval' tag, the data are rolled up to the specified interval
      using `hisRollup` with the rollup function specified by the 'csvRollupFunc' tag. If the
      'csvRollupFunc' tag is missing, then `hisRollupAuto` is used instead.
-  8. Any rows with time stamps that overlap with the point's existing history (i.e. time stamps
+  9. Any rows with time stamps that overlap with the point's existing history (i.e. time stamps
      prior to the point's 'hisEnd' tag) are dropped from the data set.
-  9. Time stamps are converted to the point's time zone and numeric values are converted to the
-     point's SkySpark unit.
-  10. The data are written to SkySpark history (which triggers the [OnWrite]`ext-his::doc#onWrite`
+  10. Time stamps are converted to the point's time zone and numeric values are converted to the
+      point's SkySpark unit.
+  11. The data are written to SkySpark history (which triggers the [OnWrite]`ext-his::doc#onWrite`
       action if the `hisOnWrite` tag is present).
   
   Notes
@@ -235,12 +238,16 @@ doc:
   
   1. At present, only numeric and Boolean 'kind''s are supported.
   2. For CSV data without headers, include the 'noHeader' marker tag in **opts** dict.
-  3. If the 'tsPattern' option is a list, then the function will try to parse the timestamp using
+  3. If the time stamp consists of multiple columns, then the 'tsColumn' option must be specified
+     as a list giving the names or indices of all time stamp columns. The function will create a
+     single time stamp by joining data from the specified columns with a space character, in the
+     order given. 'tsPattern' should be specified with this behavior in mind.
+  4. If the 'tsPattern' option is a list, then the function will try to parse the timestamp using
      each specified pattern in the list in order until either one is successful or they have all
      been exhausted.
-  4. Any records which cannot be interpreted correctly as their associated data type are dropped,
+  5. Any records which cannot be interpreted correctly as their associated data type are dropped,
      with a warning.
-  5. This function is safe to call within a job in order to automatically keep existing point
+  6. This function is safe to call within a job in order to automatically keep existing point
      histories up to date.
 src:
   (recs, uri, opts:{}) => do
@@ -420,13 +427,21 @@ src:
     //////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Timestamp column name
-    tsColumn: opts->tsColumn.mapCsvColName
+    if (opts->tsColumn.isList) do
+      // Composite timestamp
+      tsColList: (opts->tsColumn).map(n => n.mapCsvColName)
+      tsCol:     tsColList.concat("_")
+    else do
+      // Simple timestamp
+      tsCol:     opts->tsColumn.mapCsvColName
+      tsColList: [tsCol]
+    end
 
     // Valid points of interest
     p: recs.toRecList.findAll() x => x.has("csvColumn")
 
-    // Valid CSV headers = timestamp + CSV column names from point metadata
-    h: [tsColumn].addAll(p.map() point => mapCsvColName(point->csvColumn))
+    // Valid CSV headers = timestamp + CSV data column names from point metadata
+    h: tsColList.addAll(p.map() point => mapCsvColName(point->csvColumn))
 
     // Read the data and subset to needed columns
     try do
@@ -436,13 +451,27 @@ src:
       logErr("csvImportHistory", "Error reading URI: " + uri)
       throw (ex)
     end
+    
+    // Consolidate composite timestamp to single column
+    if (tsColList.size > 1) do
+      try do
+        // Create composite column
+        d = d
+          .addCol(tsCol, r => tsColList.map(col => r[col]).concat(" "))
+          .removeCols(tsColList)
+      catch (ex) do
+        // If error, log, and rethrow error
+        logErr("csvImportHistory", "Error processing composite timestamp for URI: " + uri, ex)
+        throw (ex)
+      end
+    end
 
     // Extract relevant data for each rec and store to Folio
     errorFound: false
     p = p.map() point => do
       // Catch and log any errors
       try do
-        point = writePointHis(point, tsColumn, mapCsvColName(point->csvColumn), d)
+        point = writePointHis(point, tsCol, mapCsvColName(point->csvColumn), d)
       end catch (ex) do
         logErr(
           "csvImportHistory", "Error writing history for record " + point->id + "." +
