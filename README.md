@@ -21,8 +21,8 @@ Build instructions:
 Build instructions are the same for Windows except paths use backslashes `\` and `fan` becomes
 `fan.bat`.
 
-Note that all dependencies need to be in `lib/fan` (relative to SkySpark root); the build script
-will not find pods located in `var/lib/fan`.
+Note that all dependencies need to be in `lib/fan/` (relative to SkySpark root); the build script
+will not find pods located in `var/lib/fan/`.
    
 Installation
 ------------
