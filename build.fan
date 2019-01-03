@@ -14,7 +14,7 @@ class Build : BuildPod
   {
     podName = "csvExt"
     summary = "CSV Data Import Functions"
-    version = Version("0.9.2")
+    version = Version("0.9.3")
     meta    = [
                 "ext.name":        "csv",
                 "ext.icon24":      "fan://frescoRes/img/iconMissing24.png",

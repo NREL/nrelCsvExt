@@ -175,7 +175,8 @@ doc:
   - 'checked': Check parsing failures?
     - If *true*, parsing failures will produce an error
     - If *false* (default), parsing failures will only log a warning
-  - 'tsColumn': Name or index of the CSV time stamp column (default = "ts")
+  - 'tsColumn': Name or index of the CSV time stamp column (default = "ts");
+    see *Notes*
   - 'tsPattern': String or list of strings specifying one or more patterns to use for parsing the
     time stamps in the CSV data (default = "YYYY-MM-DD hh:mm:ss"); see `parseDateTime`
   - 'tz': Time zone in which to interpret the time stamp (default = the project time zone)
@@ -211,23 +212,25 @@ doc:
   
   1. Raw data is read from **uri**.
   2. The raw data is filtered for each point in **recs**:
-     - The 'tsColumn' option gives the time stamp column.
+     - The 'tsColumn' option gives the time stamp column(s).
      - The point's 'csvColumn' tag gives the value column.
-  3. Time stamps are parsed according to the 'tsPattern' option.
-  4. Values are parsed according to the point's 'kind' tag and assigned units according to the
+  3. If the time stamp is composite (made of multiple columns), then time stamps are
+     consolidated into a single column.
+  4. Time stamps are parsed according to the 'tsPattern' option.
+  5. Values are parsed according to the point's 'kind' tag and assigned units according to the
      'csvUnit' tag (if specified).
-  5. If the point has a 'csvCallback' tag, the function it specifies is applied to the imported
+  6. If the point has a 'csvCallback' tag, the function it specifies is applied to the imported
      data.
-  6. If the point has a 'csvConvert' tag, the point conversion it specifies is applied to the
+  7. If the point has a 'csvConvert' tag, the point conversion it specifies is applied to the
      imported data using the `pointConvert` function.
-  7. If the point has a 'csvRollupInterval' tag, the data are rolled up to the specified interval
+  8. If the point has a 'csvRollupInterval' tag, the data are rolled up to the specified interval
      using `hisRollup` with the rollup function specified by the 'csvRollupFunc' tag. If the
      'csvRollupFunc' tag is missing, then `hisRollupAuto` is used instead.
-  8. Any rows with time stamps that overlap with the point's existing history (i.e. time stamps
+  9. Any rows with time stamps that overlap with the point's existing history (i.e. time stamps
      prior to the point's 'hisEnd' tag) are dropped from the data set.
-  9. Time stamps are converted to the point's time zone and numeric values are converted to the
-     point's SkySpark unit.
-  10. The data are written to SkySpark history (which triggers the [OnWrite]`ext-his::doc#onWrite`
+  10. Time stamps are converted to the point's time zone and numeric values are converted to the
+      point's SkySpark unit.
+  11. The data are written to SkySpark history (which triggers the [OnWrite]`ext-his::doc#onWrite`
       action if the `hisOnWrite` tag is present).
   
   Notes
@@ -235,12 +238,16 @@ doc:
   
   1. At present, only numeric and Boolean 'kind''s are supported.
   2. For CSV data without headers, include the 'noHeader' marker tag in **opts** dict.
-  3. If the 'tsPattern' option is a list, then the function will try to parse the timestamp using
+  3. If the time stamp consists of multiple columns, then the 'tsColumn' option must be specified
+     as a list giving the names or indices of all time stamp columns. The function will create a
+     single time stamp by joining data from the specified columns with a space character, in the
+     order given. 'tsPattern' should be specified with this behavior in mind.
+  4. If the 'tsPattern' option is a list, then the function will try to parse the timestamp using
      each specified pattern in the list in order until either one is successful or they have all
      been exhausted.
-  4. Any records which cannot be interpreted correctly as their associated data type are dropped,
+  5. Any records which cannot be interpreted correctly as their associated data type are dropped,
      with a warning.
-  5. This function is safe to call within a job in order to automatically keep existing point
+  6. This function is safe to call within a job in order to automatically keep existing point
      histories up to date.
 src:
   (recs, uri, opts:{}) => do
@@ -262,16 +269,15 @@ src:
     checked: opts->checked
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Parse Booleans from Numbers or Text
+    // Map CSV Column Headers
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Map CSV column headers
     mapCsvColName: n => if (ioOpts.has("noHeader") and n.isNumber) ("v" + n) else n.toTagName
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Parse Date/Time Using Multiple Patterns
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    // 
+    
     myParseDateTime: (x, pattern, tz, checked:checked) => do
       // Try each pattern until one succeeds
       ts: pattern.eachWhile() (pat) => x.parseDateTime(pat, tz, false)
@@ -288,6 +294,7 @@ src:
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Parse Booleans from Numbers or Text
     ////////////////////////////////////////////////////////////////////////////////////////////////
+    
     myParseBool: (x, checked:checked) => do
       // First, try parsing as a Boolean
       y: x.lower.parseBool(false)
@@ -310,10 +317,11 @@ src:
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // Write Point History to Folio
     //////////////////////////////////////////////////////////////////////////////////////////////////
+    
     writePointHis: (point, timeCol, valCol, data) => do
       // Drop all but the two columns we need
       data = data.keepCols([timeCol, valCol])
-
+      
       // If data column is missing, terminate early
       if (not (data.has(valCol))) return null
 
@@ -351,7 +359,7 @@ src:
         throw "Kind \"" + point->kind + "\" is not supported."
 
       end
-
+      
       // Drop incorrectly parsed rows (with a warning)
       before: size(data)
       data = data.findAll row => row.has("ts") and row.has("val")
@@ -407,6 +415,12 @@ src:
       if (point.has("tz")) do
         data = data.map() row => row.set("ts", (row->ts).toTimeZone(point->tz))
       end
+      
+      // Drop any data for which the point already has history
+      if (point.has("hisEnd")) data = data.findAll() row => row->ts > point->hisEnd
+
+      // Return if empty (no new data)
+      if (data.isEmpty) return null
 
       // Write history to point
       data.hisWrite(point)
@@ -420,21 +434,43 @@ src:
     //////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Timestamp column name
-    tsColumn: opts->tsColumn.mapCsvColName
+    if (opts->tsColumn.isList) do
+      // Composite timestamp
+      tsColList: (opts->tsColumn).map(n => n.mapCsvColName)
+      tsCol:     tsColList.concat("_")
+    else do
+      // Simple timestamp
+      tsCol:     opts->tsColumn.mapCsvColName
+      tsColList: [tsCol]
+    end
 
     // Valid points of interest
     p: recs.toRecList.findAll() x => x.has("csvColumn")
 
-    // Valid CSV headers = timestamp + CSV column names from point metadata
-    h: [tsColumn].addAll(p.map() point => mapCsvColName(point->csvColumn))
+    // Valid CSV headers = timestamp + CSV data column names from point metadata
+    h: tsColList.addAll(p.map() point => mapCsvColName(point->csvColumn))
 
     // Read the data and subset to needed columns
     try do
       d: ioReadCsv(uri, ioOpts).keepCols(h)
     catch (ex) do
       // If error, log, and rethrow error
-      logErr("csvImportHistory", "Error reading URI: " + uri)
+      logErr("csvImportHistory", "Error reading URI: " + uri, ex)
       throw (ex)
+    end
+    
+    // Consolidate composite timestamp to single column
+    if (tsColList.size > 1) do
+      try do
+        // Create composite column
+        d = d
+          .addCol(tsCol, r => tsColList.map(col => r[col]).concat(" "))
+          .removeCols(tsColList)
+      catch (ex) do
+        // If error, log, and rethrow error
+        logErr("csvImportHistory", "Error processing composite timestamp for URI: " + uri, ex)
+        throw (ex)
+      end
     end
 
     // Extract relevant data for each rec and store to Folio
@@ -442,12 +478,9 @@ src:
     p = p.map() point => do
       // Catch and log any errors
       try do
-        point = writePointHis(point, tsColumn, mapCsvColName(point->csvColumn), d)
+        point = writePointHis(point, tsCol, mapCsvColName(point->csvColumn), d)
       end catch (ex) do
-        logErr(
-          "csvImportHistory", "Error writing history for record " + point->id + "." +
-          "Error message was: " + ex->dis
-        )
+        logErr("csvImportHistory", "Error writing history for record " + point->id + ".", ex)
         errorFound = true
         return null
       end
@@ -455,7 +488,7 @@ src:
     end
 
     // Error check
-    if (errorFound) throw "Errors occured while importing CSV history from `" + uri + "`. See Log."
+    if (errorFound) throw "Errors occurred while importing CSV history from `" + uri + "`. See Log."
 
     // Re-read and return list of all affected recs
     p = p.removeNull
@@ -692,22 +725,24 @@ doc:
   
   This function expects a CSV file with some or all of the following columns:
 
-    Tag         | Type    | Description
-    ----------- | ------- | ------------------------------------------
-    siteName    | string  | Name of site; converted to 'dis' tag
-    siteTags    | taglist | Arbitrary list of tags to apply using Axon
-    area        | number  | Area of site
-    geoAddr     | string  | Street address
-    geoCity     | string  | City
-    geoState    | string  | State / province
-    geoCountry  | string  | Country code
-    geoCoord    | coord   | Latitude/longitude in decimal format
-    tz          | string  | String designation for site time zone
-    weatherName | string  | Weather location name; used to construct
-                |         | 'weatherRef' by matching weather record
-                |         | description
-    weatherRef  | ref     | Weather location reference; silently
-                |         | overrides 'weatherName'
+    Tag             | Type    | Description
+    --------------- | ------- | ------------------------------------------
+    siteName        | string  | Name of site; converted to 'dis' tag
+    siteTags        | taglist | Arbitrary list of tags to apply using Axon
+    area            | number  | Area of site
+    geoAddr         | string  | Street address
+    geoCity         | string  | City
+    geoState        | string  | State / province
+    geoCountry      | string  | Country code
+    geoCoord        | coord   | Latitude/longitude in decimal format
+    primaryFunction | string  | The primary function of the building
+    tz              | string  | String designation for site time zone
+    weatherName     | string  | Weather location name; used to construct
+                    |         | 'weatherRef' by matching weather record
+                    |         | description
+    weatherRef      | ref     | Weather location reference; silently
+                    |         | overrides 'weatherName'
+    yearBuilt       | number  | Year in which the building was constructed
     
   This default template can be modified using the 'template' option. Other arbitrary column names
   are also supported and will import as strings. See `csvReadRecs` for the low-level import
@@ -749,8 +784,10 @@ src:
       geoState:"string",
       geoCountry:"string",
       geoCoord:"coord",
+      primaryFunction:"string",
       weatherName:"string",
-      weatherRef:"ref"
+      weatherRef:"ref",
+      yearBuilt:"number"
     }
     if (opts.has("template")) template = merge(template, opts->template)
 
@@ -1151,6 +1188,7 @@ doc:
   - 'coord': parsed as a coord; see below
   - 'date': parsed as a date
   - 'datetime': parsed as a dateTime
+  - 'ignore': ignored (skipped)
   - 'marker': any non-empty value is interpreted as setting a marker flag
   - 'number': parsed as a number
   - 'ref': parsed as a reference
@@ -1162,7 +1200,7 @@ doc:
   missing columns are parsed as strings by default. Data type values are not case sensitive.
   
   Coordinates ( '"coord"' data type) are processed using the `coord` function. The 'sep' option
-  specifies the seperator between the two arguments of 'coord'. Similarly, tag lists ( '"taglist"'
+  specifies the separator between the two arguments of 'coord'. Similarly, tag lists ( '"taglist"'
   data type) are processed as dicts using Axon, with 'sep' interpreted as separating the tags in
   the dict. If needed in tag values, 'sep' can be protected by enclosing in quotes or escaped
   with '\'; see `delimConvert` for more information.
@@ -1192,7 +1230,7 @@ src:
     ////////////////////////////////////////////////////////////////////////////////////////////////
     
     // Parsing functions
-    parseTags: (s) => delimConvert(s,opts->sep,",").stringToDict
+    parseTags:  (s) => delimConvert(s,opts->sep,",").stringToDict
     parseCoord: (c) => eval("coord(" + delimConvert(c,opts->sep,",") + ")")
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1224,6 +1262,8 @@ src:
             tags = tags.set(n, parseDate(v))
           else if (template[n].lower == "datetime") do
             tags = tags.set(n, parseDateTime(v))
+          else if (template[n].lower == "ignore") do
+            null // no action
           else if (template[n].lower == "marker") do
             tags = tags.set(n, marker())
           else if (template[n].lower == "number") do
@@ -1240,7 +1280,7 @@ src:
             throw "Invalid field type for field " + n + ": " + template[n]
           end
 
-        // No template; use as is
+        // No template; use as is (defaults to string)
         else do
           tags = tags.set(n,v)
         end
