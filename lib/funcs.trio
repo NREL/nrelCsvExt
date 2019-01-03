@@ -1188,6 +1188,7 @@ doc:
   - 'coord': parsed as a coord; see below
   - 'date': parsed as a date
   - 'datetime': parsed as a dateTime
+  - 'ignore': ignored (skipped)
   - 'marker': any non-empty value is interpreted as setting a marker flag
   - 'number': parsed as a number
   - 'ref': parsed as a reference
@@ -1199,7 +1200,7 @@ doc:
   missing columns are parsed as strings by default. Data type values are not case sensitive.
   
   Coordinates ( '"coord"' data type) are processed using the `coord` function. The 'sep' option
-  specifies the seperator between the two arguments of 'coord'. Similarly, tag lists ( '"taglist"'
+  specifies the separator between the two arguments of 'coord'. Similarly, tag lists ( '"taglist"'
   data type) are processed as dicts using Axon, with 'sep' interpreted as separating the tags in
   the dict. If needed in tag values, 'sep' can be protected by enclosing in quotes or escaped
   with '\'; see `delimConvert` for more information.
@@ -1229,7 +1230,7 @@ src:
     ////////////////////////////////////////////////////////////////////////////////////////////////
     
     // Parsing functions
-    parseTags: (s) => delimConvert(s,opts->sep,",").stringToDict
+    parseTags:  (s) => delimConvert(s,opts->sep,",").stringToDict
     parseCoord: (c) => eval("coord(" + delimConvert(c,opts->sep,",") + ")")
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1261,6 +1262,8 @@ src:
             tags = tags.set(n, parseDate(v))
           else if (template[n].lower == "datetime") do
             tags = tags.set(n, parseDateTime(v))
+          else if (template[n].lower == "ignore") do
+            null // no action
           else if (template[n].lower == "marker") do
             tags = tags.set(n, marker())
           else if (template[n].lower == "number") do
@@ -1277,7 +1280,7 @@ src:
             throw "Invalid field type for field " + n + ": " + template[n]
           end
 
-        // No template; use as is
+        // No template; use as is (defaults to string)
         else do
           tags = tags.set(n,v)
         end
