@@ -269,16 +269,15 @@ src:
     checked: opts->checked
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Parse Booleans from Numbers or Text
+    // Map CSV Column Headers
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Map CSV column headers
     mapCsvColName: n => if (ioOpts.has("noHeader") and n.isNumber) ("v" + n) else n.toTagName
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Parse Date/Time Using Multiple Patterns
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    // 
+    
     myParseDateTime: (x, pattern, tz, checked:checked) => do
       // Try each pattern until one succeeds
       ts: pattern.eachWhile() (pat) => x.parseDateTime(pat, tz, false)
@@ -295,6 +294,7 @@ src:
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Parse Booleans from Numbers or Text
     ////////////////////////////////////////////////////////////////////////////////////////////////
+    
     myParseBool: (x, checked:checked) => do
       // First, try parsing as a Boolean
       y: x.lower.parseBool(false)
@@ -317,10 +317,11 @@ src:
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // Write Point History to Folio
     //////////////////////////////////////////////////////////////////////////////////////////////////
+    
     writePointHis: (point, timeCol, valCol, data) => do
       // Drop all but the two columns we need
       data = data.keepCols([timeCol, valCol])
-
+      
       // If data column is missing, terminate early
       if (not (data.has(valCol))) return null
 
@@ -358,7 +359,7 @@ src:
         throw "Kind \"" + point->kind + "\" is not supported."
 
       end
-
+      
       // Drop incorrectly parsed rows (with a warning)
       before: size(data)
       data = data.findAll row => row.has("ts") and row.has("val")
@@ -448,7 +449,7 @@ src:
       d: ioReadCsv(uri, ioOpts).keepCols(h)
     catch (ex) do
       // If error, log, and rethrow error
-      logErr("csvImportHistory", "Error reading URI: " + uri)
+      logErr("csvImportHistory", "Error reading URI: " + uri, ex)
       throw (ex)
     end
     
@@ -473,10 +474,7 @@ src:
       try do
         point = writePointHis(point, tsCol, mapCsvColName(point->csvColumn), d)
       end catch (ex) do
-        logErr(
-          "csvImportHistory", "Error writing history for record " + point->id + "." +
-          "Error message was: " + ex->dis
-        )
+        logErr("csvImportHistory", "Error writing history for record " + point->id + ".", ex)
         errorFound = true
         return null
       end
