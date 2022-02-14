@@ -26,8 +26,7 @@ class Build : BuildPod
                 "license.name":    "BSD-3",
                 "skyspark.docExt": "true",
               ]
-              ]
-    resDirs = [`locale/`, `lib/`]
+    resDirs = [`lib/`, `locale/`]
     index   = ["skyarc.ext": "nrelCsvExt"]
   }
   
