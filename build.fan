@@ -14,7 +14,7 @@ class Build : BuildPod
   new make()
   {
     podName = "nrelCsvExt"
-    summary = "Import and Export Functions for CSV Data"
+    summary = "Import and export functions for CSV data"
     version = Version("1.0.0")
     meta    = [
                 "ext.name":        "nrelCsv",
