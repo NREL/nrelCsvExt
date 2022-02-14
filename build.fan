@@ -8,6 +8,7 @@ using build
 **
 ** Build: nrelCsvExt
 **
+
 class Build : BuildPod
 {
   new make()
@@ -16,8 +17,8 @@ class Build : BuildPod
     summary = "Import and Export Functions for CSV Data"
     version = Version("1.0.0")
     meta    = [
-                "ext.name":        "csv",
-                "ext.depends":     ["io", "nrelUtility"],
+                "ext.name":        "nrelCsv",
+                "ext.depends":     "io,nrelUtility",
                 "ext.icon":        "table",
                 "org.name":        "NREL",
                 "org.uri":         "https://www.nrel.gov/",
