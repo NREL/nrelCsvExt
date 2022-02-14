@@ -846,7 +846,7 @@ src:
       if (opts.has("dryrun")) do
         return row
       else do
-        return addRec("Importing weather location " + row.dis, row)
+        return addRec("Importing site " + row.dis, row)
       end
     end
 
