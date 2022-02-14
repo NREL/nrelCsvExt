@@ -1,1 +1,69 @@
-TO DO
+Overview [#over]
+****************
+
+The NREL CSV extension provides convenience functions for the import and export
+of CSV data. The extension is *not* designed to import and export
+[Haystack-compliant]`https://project-haystack.org/doc/docHaystack/Csv` CSV data,
+but rather to provide a flexible interface for interacting with arbitrary,
+general purpose CSV data.
+
+Importing Records [#importrecs]
+*******************************
+
+Template [#importtemplate]
+==========================
+
+Define the template struction and data types
+
+Options [#importopts]
+=====================
+
+
+Entity-Specific Import [#entityimport]
+======================================
+
+You may import [Haystack]`https://project-haystack.org/doc/docHaystack/Ontology`
+'site', 'space', 'equip', 'point', and 'weatherStation' entities using the
+tailored functions:
+
+- Sites: `csvImportSites`
+- Spaces: `csvImportSpaces`
+- Equips: `csvImportEquips`
+- Points: `csvImportPoints`
+- Weather Stations: `csvImportWeather`
+
+These functions use the same [template]`ext-nrelCsv::doc#importtemplate`
+structure, data types, and [options]`ext-nrelCsv::doc#importopts` as
+`csvImportRecs`. However, they provide two additional features:
+
+- An entity-specific default template
+- The ability to map relationships by ref or by name
+
+Site Template
+-------------
+
+
+
+Space Template
+--------------
+
+Equip Template
+--------------
+
+Point Template
+--------------
+
+Weather Station Template
+------------------------
+
+
+
+
+
+Importing History [#importhis]
+******************************
+
+Exporting History [#exporthis]
+******************************
+
+
