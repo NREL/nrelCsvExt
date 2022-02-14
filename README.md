@@ -58,5 +58,6 @@ in the *Func* app.
 License
 -------
 
-At present, these functions are for NREL internal use only. See `LICENSE.md` for details.
+This software is licensed for use under the terms of the Berkeley Software
+Distribution 3-clause (BSD-3) license; see `LICENSE.md`.
 
