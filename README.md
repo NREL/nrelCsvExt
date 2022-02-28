@@ -10,6 +10,10 @@ package is developed and provided free of charge by the
 [Axon]: https://skyfoundry.com/doc/docHaxall/AxonLang "Axon Language"
 [National Renewable Energy Laboratory]: https://www.nrel.gov
 
+**nrelCsvExt** requires SkySpark 3.1 or later and [nrelUtilityExt] 1.1 or later.
+
+[nrelUtilityExt]: https://github.com/NREL/nrelUtilityExt/ "NREL Utility Extension"
+
 Build
 -----
 
