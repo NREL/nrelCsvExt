@@ -15,9 +15,9 @@ src:
 ---
 name:csvImportEquips
 doc:
-  Imports equip records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#entityImport` for importing equips. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
+  Imports equip records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#equipColSpec` for importing equips. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
   
-  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#import` for a full description of **spec** and **opts** and their effects
+  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
 src:
@@ -467,9 +467,9 @@ src:
 ---
 name:csvImportPoints
 doc:
-  Imports point records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#entityImport` for importing points. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
+  Imports point records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#pointColSpec` for importing points. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
   
-  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#import` for a full description of **spec** and **opts** and their effects
+  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
 src:
@@ -625,7 +625,7 @@ name:csvImportRecs
 doc:
   Imports records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
   
-  See the [CSV extension docs]`ext-nrelCsv::doc#import` for a full description of **spec** and **opts** and their effects.
+  See the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects.
 func
 src:
   (handle, spec, opts:{}) => do
@@ -772,9 +772,9 @@ src:
 ---
 name:csvImportSites
 doc:
-  Imports site records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#entityImport` for importing sites. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
+  Imports site records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#siteColSpec` for importing sites. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
   
-  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#import` for a full description of **spec** and **opts** and their effects
+  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
 src:
@@ -887,9 +887,9 @@ src:
 ---
 name:csvImportSpaces
 doc:
-  Imports space records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#entityImport` for importing spaces. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
+  Imports space records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#spaceColSpec` for importing spaces. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
   
-  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#import` for a full description of **spec** and **opts** and their effects
+  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
 src:
@@ -985,9 +985,9 @@ src:
 ---
 name:csvImportWeatherStations
 doc:
-  Imports weather station records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#entityImport` for importing weather stations. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
+  Imports weather station records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#weatherStationColSpec` for importing weather stations. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
   
-  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#import` for a full description of **spec** and **opts** and their effects
+  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
 src:
