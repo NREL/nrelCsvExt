@@ -146,7 +146,7 @@ src:
     // Preview
     preview: opts["preview"]
     if (preview == marker()) do
-      preview = 100
+      preview = 10
     else if (preview != null and not preview.isNumber) do
       throw "'preview' option must be a number."
     end
@@ -304,7 +304,7 @@ src:
       
       // Apply units
       if (point->kind=="Number" and point.has("csvUnit")) do
-        data = data.hisMap() v => v.as(point->csvUnit)
+        data = data.hisMap() v => if (v.isNA) v else v.as(point->csvUnit)
       end
   
       // Sort on timestamp
@@ -322,7 +322,7 @@ src:
       // Apply value conversion
       if (point.has("csvConvert")) do
         // Apply point conversion
-        data = data.hisMap() v => pointConvert(point, point->csvConvert, v)
+        data = data.hisMap() v => if (v.isNA) v else pointConvert(point, point->csvConvert, v)
       end
   
       // Apply rollup function
@@ -347,7 +347,7 @@ src:
   
       // Convert to SkySpark units
       if (point->kind=="Number") do
-        data = data.hisMap() v => v.to(point["unit"])
+        data = data.hisMap() v => if (v.isNA) v else v.to(point["unit"])
       end
   
       // Convert from input timezone to point timezone
