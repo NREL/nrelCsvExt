@@ -1,37 +1,41 @@
 #! /usr/bin/env fan
 
-// Copyright (C) 2017, National Renewable Energy Laboratory
+// Copyright (C) 2022, Alliance for Sustainable Energy, LLC
 // All Rights Reserved
 
 using build
 
 **
-** Build: csvExt
+** Build: nrelCsvExt
 **
+
 class Build : BuildPod
 {
   new make()
   {
-    podName = "csvExt"
-    summary = "CSV Data Import Functions"
-    version = Version("0.9.3")
+    podName = "nrelCsvExt"
+    summary = "Import and export functions for CSV data"
+    version = Version("0.9.4")
     meta    = [
-                "ext.name":        "csv",
-                "ext.icon24":      "fan://frescoRes/img/iconMissing24.png",
-                "ext.icon72":      "fan://frescoRes/img/iconMissing72.png",
+                "ext.name":        "nrelCsv",
+                "ext.depends":     "io,nrelUtility",
+                "ext.icon":        "table",
                 "org.name":        "NREL",
                 "org.uri":         "https://www.nrel.gov/",
-                "proj.name":       "CSV",
-                "proj.uri":        "https://github.nrel.gov/sfrank1/csvExt",
-                "license.name":    "Commercial",
+                "proj.name":       "NREL CSV Extension",
+                "proj.uri":        "https://github.nrel.gov/IntelligentCampus/nrelCsvExt",
+                "license.name":    "BSD-3",
                 "skyspark.docExt": "true",
               ]
-    depends = ["sys 1.0", "axon 3.0", "ioExt 3.0", "nrelUtilityExt 1.1+"]
-    resDirs = [`locale/`,
-               `lib/`]
-    index   =
-    [
-      "skyarc.ext": "csvExt",
-    ]
+    depends = ["sys 1+", "hx 3.1+"]
+    resDirs = [`lib/`, `locale/`]
+    index   = ["skyarc.ext": "nrelCsvExt"]
   }
+  
+  // To publish to StackHub, use: bin/fan /path/to/build.fan publish 
+  // For more information, see: https://skyfoundry.com/doc/stackhub/index#publishing
+  
+  //Future Use...
+  //@Target { help = "Publish to stackhub.org " }
+  //Void publish() { stackhub::PublishTask(this).run }
 }
