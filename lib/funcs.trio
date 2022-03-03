@@ -20,6 +20,7 @@ doc:
   - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
+overridable
 src:
   (handle, spec:null, opts:{}) => do
   
@@ -121,6 +122,7 @@ src:
 name:csvImportHistory
 doc:"Imports point history for specified **points** from CSV data provided by **handle** and writes imported data to the database. See the [CSV extension docs]`ext-nrelCsv::doc#importHis` for implementation details, including required tags and a list of options passed via **opts**."
 func
+overridable
 src:
   (points, handle, opts:{}) => do
   
@@ -472,6 +474,7 @@ doc:
   - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
+overridable
 src:
   (handle, spec:null, opts:{}) => do
   
@@ -627,6 +630,7 @@ doc:
   
   See the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects.
 func
+overridable
 src:
   (handle, spec, opts:{}) => do
     
@@ -777,6 +781,7 @@ doc:
   - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
+overridable
 src:
   (handle, spec:null, opts:{}) => do
   
@@ -892,6 +897,7 @@ doc:
   - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
+overridable
 src:
   (handle, spec:null, opts:{}) => do
   
@@ -990,6 +996,7 @@ doc:
   - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
+overridable
 src:
   (handle, spec:null, opts:{}) => do
   
@@ -1098,6 +1105,7 @@ doc:
     
   Enclosing quotes are omitted from example outputs.
 func
+overridable
 src:
   (s, old, new:",") => do
     // Check delimiter sizes
