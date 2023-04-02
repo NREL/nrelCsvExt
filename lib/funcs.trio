@@ -13,17 +13,185 @@ src:
     diff(null, rec, {add})
   end
 ---
+name:csvExportHistory
+doc:"For the specified 'points' and time 'span', read and export a history grid a CSV files at 'handle', optionally with some convenience processing. See the [CSV extension docs]`ext-nrelCsv::doc#exportHis` for implementation details, a list of options passed via 'opts' and their effects."
+func
+overridable
+src:
+  (points, span, handle, opts:{}) => do
+  
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Options
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+  
+    // Default options
+    opts = merge({
+      clean:       false,
+      headerUnits: true,
+      interpolate: false,
+      removeUnits: true
+    }, opts)
+    
+    // T/F options
+    opts = opts.set("clean",       opts.has("clean")       and opts["clean"]       != false)
+    opts = opts.set("headerUnits", opts.has("headerUnits") and opts["headerUnits"] != false)
+    opts = opts.set("interpolate", opts.has("interpolate") and opts["interpolate"] != false)
+    opts = opts.set("removeUnits", opts.has("removeUnits") and opts["removeUnits"] != false)
+    
+    // Valid pass-through options for ioReadCsv()
+    ioOpts: opts.findAll() (v, n) => n.in(["delimiter", "noHeader"])
+  
+    // Preview
+    preview: opts["preview"]
+    if (preview == marker()) do
+      preview = 10
+    else if (preview != null and not preview.isNumber) do
+      throw "'preview' option must be a number."
+    end
+    
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Helper Functions
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    // Range cleaning
+    if (opts->clean) do
+      hisRangeCleanInternal: (src, point) => do
+        // Skip if not numeric
+        if (point["kind"] != "Number") return src
+        
+        // Get default value
+        if (point.has("defVal")) do
+          defVal: point->defVal
+        else if (opts.has("defVal")) do
+          defVal: opts->defVal
+        else do
+          defVal: null
+        end
+        
+        // Get range
+        minVal: if (point.has("minVal")) point->minVal else negInf()
+        maxVal: if (point.has("maxVal")) point->minVal else posInf() 
+  
+        // No default value: remove
+        if (defVal == null) do
+          src = src.hisFindAll((v, t) => v != na() and v >= minVal.to(v) and v <= maxVal.to(v)) 
+  
+        // Default value: replace
+        else do
+          src = src.hisMap() (v, t) => do
+            if (v == na() or (v >= minVal.to(v) and v <= maxVal.to(v))) do
+              return v
+            else do
+              return defVal
+            end
+          end
+        end
+  
+        // Return
+        return src
+      end
+    else do
+      hisRangeCleanInternal: (src, point) => src
+    end
+  
+    // Internal function to roll up history only
+    if (opts.has("interval")) do
+      hisRollupInternal: (src, point) => do
+        // Numeric
+        if (point["kind"] == "Number") do
+          return src.hisRollupAuto(opts->interval)
+  
+        // Boolean
+        else if (point["kind"] == "Bool") do
+          hisRollup(src, durTrue, opts->interval)
+            .hisMap(v => (v.to(opts->interval) / opts->interval).as(""))
+  
+        // Unsupported
+        else do
+          throw "Unsupported rollup kind \"" + p["kind"] + "\" for point: " + p.dis
+        end
+      end
+    else do
+      hisRollupInternal: (src, point) => src
+    end
+      
+    // Internal function to interpolate history
+    if (opts->interpolate) do
+      hisInterpolateInternal: (src) => src.hisInterpolate
+    else do
+      hisInterpolateInternal: (src) => src
+    end
+    
+    // Internal function to remove units
+    if (opts->removeUnits) do
+      hisRemoveUnitsInternal: (src) => src.hisMap(v => if (v.isNumber) v.to("") else v)
+    else do
+      hisRemoveUnitsInternal: (src) => src
+    end
+    
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Export History
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+  
+    // Dates to span
+    span = span.toSpan
+  
+    // Read and pre-process data
+    data: points
+      .toRecList
+      .map(p => p
+        .hisRead(span, {-limit})
+        .hisRangeCleanInternal(p)
+        .hisRollupInternal(p)
+        .hisRemoveUnitsInternal
+      )
+      .hisJoin
+      .hisInterpolateInternal
+      .hisClip
+  
+    // Column headers (descriptions)
+    data.colNames.each() cn => do
+      // Skip timestamp
+      if (cn == "ts") return null // skip timestamp column
+      
+      // Get description
+      metadata: data.col(cn).meta
+      dis: metadata.dis
+      
+      // Append units
+      if (opts->headerUnits and metadata.has("unit")) do
+        dis = dis + " (" + metadata->unit + ")"
+      end
+      
+      // Fix 'dis' (becomes column header)
+      data = data.addColMeta(cn, {dis:dis, -disMacro})
+    end
+      
+    // Format timestamps?
+    if (opts.has("tsPattern")) do
+      data = data.map() row => row.set("ts", row->ts.format(opts->tsPattern))
+    end
+    
+    // Preview?
+    if (preview != null) do
+      return getSafe(data, 0..(preview))
+    end
+  
+    // Write output
+    data.ioWriteCsv(handle, ioOpts)
+  end
+---
 name:csvImportEquips
 doc:
-  Imports equip records from CSV data provided by **handle**, parsing them according to the provided column specification dictionary **spec** and options **opts**. The user-provided **spec**, if any, is merged with a [default column specification]`ext-nrelCsv::doc#equipColSpec` for importing equips. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
+  Imports equip records from CSV data provided by 'handle', parsing them according to the provided column 'spec' (specification) and options 'opts'. The user-provided 'spec', if any, is merged with a [default column specification]`ext-nrelCsv::doc#equipColSpec` for importing equips. Returns a grid of dicts ready to commit as Folio records. If option 'commit' is enabled, also commits the records to the Folio.
   
-  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of **spec** and **opts** and their effects
+  - See `csvImportRecs` and the [CSV extension docs]`ext-nrelCsv::doc#importRecs` for a full description of 'spec' and 'opts' and their effects
   - See [entity-specific import]`ext-nrelCsv::doc#entityImport` for other implementation details
 func
 overridable
 src:
   (handle, spec:null, opts:{}) => do
-  
+    
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // Setup
     //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -34,24 +202,24 @@ src:
     
     // Record template
     template: {equip}
-    if (opts.has("template")) do
-      template = opts->template.merge(template)
-      opts = opts.remove("template") // For downstream use by csvImportRecs
-    end
+    if (opts.has("template")) template = opts->template.merge(template)
     
-    // Commit option
-    commitRecs: opts.has("commit") and opts["commit"] != false
-    opts = opts.merge({-commit}) // For downstream use by csvImportRecs
+    // T/F options
+    opts = opts.set("checked", opts.has("checked") and opts["checked"] != false)
+    opts = opts.set("commit",  opts.has("commit")  and opts["commit"]  != false)
+    opts = opts.set("log",     opts.has("log")     and opts["log"]     != false)
+    opts = opts.set("noWarn",  opts.has("noWarn")  and opts["noWarn"]  != false)
     
-    // Other true/false options
-    checked: opts.has("checked") and opts["checked"] != false
-    log:     opts.has("log")     and opts["log"]     != false
-    noWarn:  opts.has("noWarn")  and opts["noWarn"]  != false
-    
+    // Downstream options for csvImportRecs()
+    downstreamOpts: opts.merge({commit:false, template:template})
+  
     // CSV column specification
     defaultSpec: {
-      equipName: "string",
+      dis:       "string",
+      navName:   "string",
       equipTags: "tags",
+      equipName: "string",
+      equipRef:  "ref",
       siteName:  "string",
       siteRef:   "ref",
       spaceName: "string",
@@ -62,74 +230,77 @@ src:
     else do
       spec = defaultSpec
     end
-      
+  
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // Main
     //////////////////////////////////////////////////////////////////////////////////////////////////
   
     // Read from CSV
-    d: csvImportRecs(handle, spec, opts)
-      
+    d: csvImportRecs(handle, spec, downstreamOpts)
+  
     // Process records
     recs: d.map() row => do
-      // Merge common template
-      row = row.merge(template)
-      
-      // Set equip description
-      row = row.set("navName", row["equipName"]).remove("equipName")
-      
-      // Default disMacro
-      if (row.missing("dis") and row.missing("disMacro")) do
-        row = row.set("disMacro", "\$siteRef \$navName")
-      end
-      
       // Map site
       try do
         row = row
-          .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], noWarn))
+          .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
           .remove("siteName")
       catch (ex) do
-        if (checked) throw ex
+        if (opts->checked) throw ex
         row = row.remove("siteRef").remove("siteName") // Clean up on failure
       end
-      
+  
       // Map space
       try do
         row = row
-          .set("spaceRef", getSpaceByRefOrName(row, opts["matchRefsBy"], noWarn))
+          .set("spaceRef", getSpaceByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
           .remove("spaceName")
       catch (ex) do
-        if (checked) throw ex
+        if (opts->checked) throw ex
         row = row.remove("spaceRef").remove("spaceName") // Clean up on failure
       end
+  
+      // Equip nesting (if applicable)
+      if (row.has("equipName") or row.has("equipRef")) do
+        try do
+          row = row
+            .set("equipRef", getEquipByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+            .remove("equipName")
+        catch (ex) do
+          if (opts->checked) throw ex
+          row = row.remove("equipRef").remove("equipName") // Clean up on failure
+        end
+      end
       
+      // Default disMacro
+      if (row.missing("dis") and row.missing("disMacro") and row.has("navName")) do
+        row = row.set("disMacro", "\$siteRef \$navName")
+      end
+  
       // Return processed record
       return row.removeNull
     end
   
-    // Return or commit
-    if (commitRecs) do
-      return recs.toRecList.map(csvAddRec(_, log, "csvImportEquips")).commit
+     // Return or commit
+    if (opts->commit) do
+      return recs.toRecList.map(csvAddRec(_, opts->log, "csvImportEquips")).commit
     else do
       return recs
     end
-    
-  end
   
-  // Potential starting point for future unit tests:
-  // csvImportEquips("equipName, equipTags, siteName, spaceName\n\"Main Meter\",elec meter,\"My Site\",\"My Site 1st Floor\"",{},{})
+  end
 ---
 name:csvImportHistory
-doc:"Imports point history for specified **points** from CSV data provided by **handle** and writes imported data to the database. See the [CSV extension docs]`ext-nrelCsv::doc#importHis` for implementation details, including required tags and a list of options passed via **opts**."
+doc:"Imports point history for specified 'points' from CSV data provided by 'handle' and writes imported data to the database. See the [CSV extension docs]`ext-nrelCsv::doc#importHis` for implementation details, including required tags and a list of options passed via 'opts'."
 func
 overridable
 src:
   (points, handle, opts:{}) => do
-  
+    
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Options
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    
+  
     // Default options
     opts = merge({
       checked:  true,
@@ -138,13 +309,24 @@ src:
       tz:       now().tz
     }, opts)
     
+    // T/F options
+    opts = opts.set("checked",   opts.has("checked")   and opts["checked"]   != false)
+    opts = opts.set("noWarn",    opts.has("noWarn")    and opts["noWarn"]    != false)
+    opts = opts.set("overwrite", opts.has("overwrite") and opts["overwrite"] != false)
+    
+    // Span
+    if (opts["span"] == null and opts->overwrite) do
+      // If span is unspecified, never overwrite
+      logWarn("csvImportHistory", "'span' option is null; ignoring 'overwrite' option.")
+      opts = opts.set("overwrite", false)
+    else if (opts["span"] != null) do
+      // Normalize span
+      opts = opts.set("span", opts->span.toSpan)
+    end
+      
     // Valid pass-through options for ioReadCsv()
     ioOpts: opts.findAll() (v, n) => n.in(["delimiter", "noHeader"])
-    
-    // True/false options
-    checked: opts.has("checked") and opts["checked"] != false
-    noWarn:  opts.has("noWarn")  and opts["noWarn"]  != false
-    
+  
     // Preview
     preview: opts["preview"]
     if (preview == marker()) do
