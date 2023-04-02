@@ -1,6 +1,8 @@
-siteName,equipName,pointName,pointTags,kind,unit,csvColumn,csvUnit
-My Building,Main Meter,Power,elec power sensor,Number,kW,Site Power,W
-My Building,Main Meter,Energy,elec energy sensor hisTotalized,Number,kWh,Site Energy,Wh
-My Building,Main Meter,Power Factor,elec pf sensor mytag:42,Number,,Site Power Factor,
-My Building,AHU-1,Status,sensor,Bool,,AHU-1 Status,
-My Building,AHU-1,Command,cmd,Bool,,AHU-1 Command,
+weatherStationName,siteName,spaceName,equipName,navName,pointTags,tz,kind,unit,csvColumn,csvUnit
+"Golden, CO",,,,Temp,air temp sensor his,,Number,°F,,
+"Golden, CO",,,,Humidity,air humidity sensor his,,Number,%,,
+,My Building,My Building Electrical,My Building Main Meter,Power,elec power sensor his,"America/New_York",Number,kW,Site Power,W
+,My Building,My Building Electrical,My Building Main Meter,Energy,elec energy sensor his hisTotalized,,Number,kWh,Site Energy,Wh
+,My Building,My Building Electrical,My Building Main Meter,Power Factor,elec pf sensor his mytag:42,,Number,pf,Site Power Factor,
+,My Building,My Building Penthouse,My Building AHU-1,Status,sensor his,,Bool,,AHU-1 Status,
+,My Building,My Building Penthouse,My Building AHU-1,Command,cmd his,,Bool,,AHU-1 Command,

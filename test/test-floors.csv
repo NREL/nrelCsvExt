@@ -1,0 +1,5 @@
+siteName,navName,spaceTags,area,floor,floorNum
+My Building,Basement,subterranean,5000ft²,x,-1
+My Building,Floor 1,ground,10000ft²,x,0
+My Building,Floor 2,floorNum:1,8000ft²,x,
+My Building,Penthouse,floor roof,2000ft²,,

@@ -1,0 +1,211 @@
+name:testNrelCsvExt
+func
+nodoc
+src:
+  // Test script for nrelCsvExt
+  // - All required test CSV input files must be present in `io/` directory
+  // - Must be run in an empty project
+  
+  () => do
+  
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Setup
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    // Verify empty project
+    if (readAll(site or space or equip or point or weatherStation).size > 0) do
+      throw "Project must be empty"
+    end
+    
+    // Helper functions
+    expectEqual: (val, expected) => do
+      if (not equals(val, expected)) do
+        throw val.toStr + " does not equal " + expected.toStr
+      end
+    end
+  
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // csvImportRecs()
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    // Column spec
+    spec: {
+      auto:     "auto",
+      bool:     "bool",
+      coord:    "coord",
+      date:     "date",
+      dateTime: "dateTime",
+      dict:     "dict",
+      float:    "float",
+      ignore:   "ignore",
+      integer:  "integer",
+      list:     "list",
+      marker:   "marker",
+      number:   "number",
+      ref:      "ref",
+      string:   "string",
+      tags:     "tags",
+      time:     "time",
+      uri:      "uri"
+    }
+    
+    // Read records
+    recs: csvImportRecs( `io/test-data-types.csv`, spec)
+     
+    // Data Type: Auto
+    expectEqual(recs[0]->auto, "I'm a string")
+    expectEqual(recs[1]->auto, 1kW)
+    
+    // Data Type: Bool
+    expectEqual(recs[0]->bool, true)
+    expectEqual(recs[1]->bool, false)
+    
+    // Data Type: Coord
+    expectEqual(recs[0]->coord, coord(39.7, -105.2))
+    
+    // Data Type: Date
+    expectEqual(recs[0]->date, 1953-02-28)
+    expectEqual(recs[1]->date, 1969-07-20)
+    
+    // Data Type: DateTime
+    expectEqual(recs[0]->dateTime.date, 2001-02-03)
+    expectEqual(recs[0]->dateTime.tz, now().tz)
+    
+    // Data Type: Dict
+    expectEqual(recs[0]->dict, {foo, bar, baz:1})
+    
+    // Data Type: Float
+    expectEqual(recs[0]->float, 3.14)
+    
+    // Data Type: Ignore
+    expectEqual(recs[0]["ignore"], null)
+    expectEqual(recs[1]["ignore"], null)
+    
+    // Data Type: Integer
+    expectEqual(recs[0]->integer, 42)
+    
+    // Data Type: List
+    expectEqual(recs[0]->list, [1, 2, 3])
+    expectEqual(recs[1]->list, ["a", "b,c", "d"])
+    
+    // Data Type: Marker
+    expectEqual(recs[0]->marker, marker())
+    expectEqual(recs[1]->marker, marker())
+    
+    // Data Type: Number
+    expectEqual(recs[0]->number, 55°F)
+    expectEqual(recs[1]->number, 99)
+    
+    // Data Type: Ref
+    expectEqual(recs[0]->ref, @abc)
+    expectEqual(recs[1]->ref, @123)
+     
+    // Data Type: String
+    expectEqual(recs[0]->string, "Hello. My name is Inigo Montoya.")
+    expectEqual(recs[1]->string, "Anybody want a peanut?")
+    
+    // Data Type: Tags
+    expectEqual(recs[0]["foo"], marker())
+    expectEqual(recs[0]["bar"], marker())
+    expectEqual(recs[1]["baz"], "Hello World")
+    expectEqual(recs[1]["xyzzy"], marker())
+    
+    // Data Type: Time
+    expectEqual(recs[0]->time, time(11,1))
+    expectEqual(recs[1]->time, time(12,34,56))
+      
+    // Data Type: Uri
+    expectEqual(recs[0]->uri, `io/handle.txt`)
+    expectEqual(recs[1]->uri, `https://www.nrel.gov`)
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // csvImportWeather()
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+    
+    // Auxiliary spec for weatherStations (enables sync and also tests setting a spec)
+    weatherStationSpec: {weatherSyncIds:"list"}
+    
+    // Import weather stations
+    csvImportWeatherStations(`io/test-weatherStations.csv`, weatherStationSpec, {commit:true, log:true})
+    
+    // TO DO: Verify imported records are correct
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // csvImportSites()
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+    
+    // Import sites (first campuses, then buildings)
+    csvImportSites(`io/test-campuses.csv`, null, {commit:true, log:true})
+    csvImportSites(`io/test-buildings.csv`, null, {commit:true, log:true})
+    
+    // TO DO: Verify imported records are correct
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // csvImportSpaces()
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+    
+    // Import spaces (first floors, then rooms)
+    csvImportSpaces(`io/test-floors.csv`, null, {commit:true, log:true})
+    csvImportSpaces(`io/test-rooms.csv`, null, {commit:true, log:true})
+    
+    // TO DO: Verify imported records are correct
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // csvImportEquips()
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+    
+    // Import equips
+    csvImportEquips(`io/test-equips.csv`, null, {commit:true, log:true})
+    
+    // TO DO: Verify imported records are correct
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // csvImportPoints()
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+    
+    // Import points (including weather points)
+    csvImportPoints(`io/test-points.csv`, null, {commit:true, log:true})
+    
+    // TO DO: Verify imported records are correct
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // csvImportHistory()
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+    
+    // Preview history
+    readAll(point and csvColumn).csvImportHistory(`io/test-his.csv`, {tsColumn:"Timestamp", preview})
+    
+    // Import history
+    readAll(point and csvColumn).csvImportHistory(`io/test-his.csv`, {tsColumn:"Timestamp"})
+    
+    // Overwrite history
+    readAll(point and csvColumn).csvImportHistory(
+      `io/test-his.csv`,
+      {tsColumn:"Timestamp", span:2020-01-01, noWarn, overwrite}
+    )
+    
+    // Check errors
+    try do
+      readAll(point and csvColumn).csvImportHistory(`io/test-his-errors.csv`, {tsColumn:"Timestamp"})
+    catch (ex) do
+      if (not ex.dis.startsWith("Errors occurred while importing CSV history")) do
+        throw "Unexpected error message: " + ex.dis
+      end
+    end
+    
+    // TO DO: Verify imported history is correct
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // csvImportHistory()
+    //////////////////////////////////////////////////////////////////////////////////////////////////  
+    
+    // Very basic test that function runs
+    readAll(point and csvColumn).csvExportHistory(2020-01-01, null, {preview})
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Finish
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    return "All tests passed"
+    
+  end

@@ -1,3 +1,0 @@
-weatherName,weatherPointName,weatherPointTags,kind,unit
-"Golden, CO","Golden, CO Temp",air temp sensor his,Number,°F
-"Golden, CO","Golden, CO Humidity",air humidity sensor his,Number,%
