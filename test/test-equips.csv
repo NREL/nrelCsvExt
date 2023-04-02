@@ -1,3 +1,3 @@
-siteName,equipName,equipTags
-My Building,Main Meter,elec meter siteMeter
-My Building,AHU-1,ahu hvac
+siteName,spaceName,navName,equipTags
+My Building,My Building Electrical,Main Meter,elec meter siteMeter
+My Building,My Building Penthouse,AHU-1,ahu hvac

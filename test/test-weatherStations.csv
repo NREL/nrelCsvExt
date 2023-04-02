@@ -1,0 +1,3 @@
+dis,weatherStationTags,geoCity,geoCoord,geoState,geoCountry,tz,weatherSyncIds
+"Golden, CO",weatherAutoSyncForecast weatherAutoSyncHis,Golden,39.756 -105.221,CO,US,Denver,"[""temp"",""humidity""]"
+"New York, NY",weatherAutoSyncForecast weatherAutoSyncHis,New York,40.714 -74.006,NY,US,New_York,
