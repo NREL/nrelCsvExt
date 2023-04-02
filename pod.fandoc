@@ -3,12 +3,12 @@ Overview [#overview]
 
 The NREL CSV extension provides convenience functions for the import and export
 of CSV data. The extension is *not* designed to import and export
-[Haystack-compliant]`https://project-haystack.org/doc/docHaystack/Csv` CSV data,
-but rather to provide a flexible interface for interacting with arbitrary,
-general purpose CSV data.
+[Haystack-compliant]`docHaystack::Csv` CSV data, but rather to provide a
+flexible interface for exchanging arbitrary, general purpose CSV data with other
+software.
 
 The NREL CSV extension requires SkySpark 3.1 or later and
-[nrelUtilityExt]`https://stackhub.org/package/nrelUtilityExt` 1.1 or later.
+[nrelUtilityExt]`https://stackhub.org/package/nrelUtilityExt` 2.0 or later.
 
 Importing Records [#importRecs]
 *******************************
@@ -19,34 +19,36 @@ records from CSV data.
 Column Specification [#importSpec]
 ==================================
 
-`csvImportRecs` accepts a column specification dictionary, or **spec**, that
-governs the interpretation of CSV data columns. In the **spec**, key names match
+`csvImportRecs` accepts a column specification dictionary, or 'spec', that
+governs the interpretation of CSV data columns. In the 'spec', key names match
 to column names in the CSV file (after applying `toTagName`) and key values are
 strings specifying a column data type. The supported data types are:
 
-- 'axon': parsed and evaluated as literal Axon code; **use with caution!**
-- 'bool': parsed as a Boolean
-- 'coord': parsed as a coord
-- 'date': parsed as a date
-- 'datetime': parsed as a dateTime
+- 'auto': guesses data type automatically using `parseAuto`
+- 'bool': parsed as a [Boolean]`parseBool`
+- 'coord': parsed as a [coord]`parseCoord`
+- 'date': parsed as a [date]`parseDate`
+- 'datetime': parsed as a [dateTime]`parseDateTime`
+- 'dict': parsed as a [dict]`parseDict` (must follow valid
+  [Zinc]`docHaystack::Zinc` syntax)
+- 'float': parsed as a [floating point number]`parseFloat`
 - 'ignore': ignored (skipped)
-- 'integer': parsed as an integer
+- 'integer': parsed as an [integer]`parseInt`
+- 'list': parsed as a [list]`parseList` (must follow valid
+  [Zinc]`docHaystack::Zinc` syntax)
 - 'marker': any non-empty value is interpreted as setting a marker flag
-- 'number': parsed as a number
-- 'ref': parsed as a reference
+- 'number': parsed as a [number]`parseNumber`
+- 'ref': parsed as a [ref]`parseRef`; handles an optional trailing 'dis'
 - 'string': parsed as a string
-- 'time': parsed as a time
-- 'tags': parsed as set of tags provided as name-value pairs; must follow valid
-  [Zinc]`docHaystack::Zinc` syntax
-- 'uri': parsed as a uri
+- 'tags': parsed as set of tags provided as name-value pairs (must follow valid
+  [Zinc]`docHaystack::Zinc` syntax for each tag)
+- 'time': parsed as a [time]`parseTime`
+- 'uri': parsed as a [uri]`parseUri`
 
-Any other value in **spec** will cause an error when the corresponding column is
-parsed. Any column without an entry in **spec** is parsed as a string.
-
-XStr and the Haystack collection data types (Dicts, Lists, and Grids) are not
-supported directly, but can be created indirectly via Axon code using the
-'"axon"' data type. However, the '"axon"' data type is not allowed in [safe
-mode]`ext-nrelCsv::doc#safeImport`.
+Any other value in 'spec' will cause an error when the corresponding column is
+parsed. Any column without an entry in 'spec' is parsed as a string. The
+'"tags"' and '"coord"' data types use an alternate seperator; see the 'sep'
+option below.
 
 Options [#importOpts]
 =====================
@@ -54,64 +56,47 @@ Options [#importOpts]
 Options for `csvImportRecs` are passed as name-value pairs within the **opts**
 argument. The following options are supported:
 
-- 'delimiter': column delimiter character; passed through to `ioStreamCsv`
-- 'noHeader': passed through to `ioStreamCsv`
-- 'sep': tag and value separator used to interpret '"tags"' and '"coord"'
-  data types (cannot be the same as 'delimiter'; default = '" "')
-- 'template': optional dict of tags to apply to all imported records
+- 'delimiter': Column delimiter character; passed through to `ioStreamCsv`
+- 'noHeader': Passed through to `ioStreamCsv`
+- 'sep': Tag and value separator used to interpret '"tags"' and '"coord"'
+  data types (must not be the same as 'delimiter'; default = '" "')
+- 'template': Optional dict of tags to apply to all imported records
 - 'checked': Boolean; if 'true' then throw an error on parsing failures; if
   'false' return 'null' for CSV data that fails to parse (default = 'true')
 - 'commit': Boolean; if 'true' commit records to the Folio as well as returning
   them (default = 'false')
 - 'log': Boolean; if 'true' create a log entry for each committed record
   (default = 'false')
-- 'safe': Boolean; if 'true' disallow the 'axon' column type (default = 'true';
-  see [safe mode]`ext-nrelCsv::doc#safeImport`)
 - 'noWarn': Boolean; if 'true' suppress warnings (default = 'false')
-- 'datePattern': pattern for parsing dates (for default, see `parseDate`)
-- 'dateTimePattern': pattern for parsing dateTimes (for default, see
+- 'datePattern': Pattern for parsing dates (for default, see `parseDate`)
+- 'dateTimePattern': Pattern for parsing dateTimes (for default, see
   `parseDateTime`)
-- 'timePattern': pattern for parsing times (for default, see `parseTime`)
+- 'timePattern': Pattern for parsing times (for default, see `parseTime`)
+- 'tz': Time zone for parsing dateTimes (default = 'now().tz')
 
-The 'checked', 'commit', 'log', 'safe', and 'noWarn' options may be also be
-passed as markers, with 'x' equivalent to 'x:true' and '-x' equivalent to
-'x:false'. For date, time, and dateTime parsing patterns see
-`sys::Time.toLocale`.
-
-Safe Mode [#safeImport]
------------------------
-
-The '"axon"' data type uses `eval` to evaluate arbitrary Axon code and assign
-the output to the imported column value. While this allows extremely flexible
-and powerful imports, it also presents a security risk: `eval` will execute the
-imported code with the same level of privelege as the user who called the import
-function, potentially exposing the SkySpark project to malicious code.
-
-The 'safe' option (enabled by default) disallows the '"axon"' column type;
-'"axon"' columns are instead imported as strings (with a warning). Safe mode
-should be disabled only if you have full control of the CSV data being imported
-or otherwise have full confidence that all Axon code that will be evaluated is
-safe.
+The 'checked', 'commit', 'log', 'and 'noWarn' options may be also be passed as
+markers, with 'x' equivalent to 'x:true' and '-x' equivalent to 'x:false'. For
+date, time, and dateTime parsing patterns see `sys::Time.toLocale`.
 
 Entity-Specific Import [#entityImport]
 ======================================
 
-You may import [Haystack]`https://project-haystack.org/doc/docHaystack/Ontology`
-'site', 'space', 'equip', 'point', and 'weatherStation' entities using the
+You may import [Haystack]`docHaystack::Ontology`
+'weatherStation', 'site', 'space', 'equip', and 'point' and entities using the
 tailored functions:
 
+- Weather Stations: `csvImportWeatherStations`
 - Sites: `csvImportSites`
 - Spaces: `csvImportSpaces`
 - Equips: `csvImportEquips`
 - Points: `csvImportPoints`
-- Weather Stations: `csvImportWeatherStations`
 
 These functions use the same [column specification]`ext-nrelCsv::doc#importSpec`
 format, data types, and [options]`ext-nrelCsv::doc#importOpts` as
 `csvImportRecs`. However, they provide two additional features:
 
 - The ability to map some standard relationships ('siteRef', 'equipRef', etc.)
-- An entity-specific default column specification
+- Entity-specific default column specifications
 
 Mapping Refs [#importRefs]
 --------------------------
@@ -121,7 +106,7 @@ Relationships for records are assigned using the following (in priority order):
 1. As provided in the 'template' option
 2. By parsing an appropriate column named '*Ref' of data type 'ref', if present
 3. By parsing an appropriate column named '*Name' of data type 'string' and
-   using the value to map the record to an existing entity by name
+   using the value to map the record to an existing entity by name/description
 
 If multiple sources exist, the higher-priority source is used with a warning
 (suppressable with the 'noWarn' option).
@@ -148,6 +133,40 @@ behavior for different types of refs (e.g. sites vs. spaces) is not supported.
 Instead, use post-processing or the 'template' option to assign the correct
 refs.
 
+Nesting
+-------
+
+Entities that can be nested (such as [sites]`site`, [spaces]`space`, and
+[equips]`equip`) also support mapping of parent records of the same type using
+the '*Name' pattern. However, for this to work properly, the parent records must
+already exist in the database. Making this work in practice requires multiple
+import passes. 
+
+Weather Station Column Specification [#weatherStationColSpec]
+-------------------------------------------------------------
+
+Default column specification for `csvImportWeatherStations`:
+
+  Tag                | Type    | Description
+  ------------------ | ------- | ------------------------------------------------
+  dis                | string  | Weather station display name
+  weatherStationTags | tags    | Arbitrary set of tags to apply
+  geoAddr            | string  | Full address
+  geoStreet          | string  | Street address
+  geoCity            | string  | City
+  geoCounty          | string  | Subdivision of state/province
+  geoState           | string  | State or province
+  geoCountry         | string  | Country code
+  geoPostalCode      | string  | Postal code (ZIP code, in USA)
+  geoCoord           | coord   | Latitude/longitude in decimal format
+  geoElevation       | number  | Elevation above sea level
+  tz                 | string  | String designation for weather station time zone
+
+Imported weather stations always receive the 'weatherStation' tag, plus any
+user-specified template. If a 'tz' column is not provided, imported weather
+stations also receive a 'tz' tag from the 'tz' import option (default =
+'now().tz').
+
 Site Column Specification [#siteColSpec]
 ----------------------------------------
 
@@ -155,7 +174,7 @@ Default column specification for `csvImportSites`:
 
   Tag                | Type    | Description
   ------------------ | ------- | ------------------------------------------------------------------------------------
-  siteName           | string  | Name of site; converted to 'dis' tag
+  dis                | string  | Site display name
   siteTags           | tags    | Arbitrary set of tags to apply
   area               | number  | Area of site
   geoAddr            | string  | Full address
@@ -166,15 +185,18 @@ Default column specification for `csvImportSites`:
   geoCountry         | string  | Country code
   geoPostalCode      | string  | Postal code (ZIP code, in USA)
   geoCoord           | coord   | Latitude/longitude in decimal format
+  geoElevation       | number  | Elevation above sea level
   primaryFunction    | string  | The primary function of the building
+  siteName           | string  | Parent site name; used to construct 'siteRef' via named-based matching
+  siteRef            | ref     | Site ref; overrides 'siteName'
   tz                 | string  | String designation for site time zone
   weatherStationName | string  | Weather station name; used to construct 'weatherStationRef' via named-based matching 
   weatherStationRef  | ref     | Weather station ref; overrides 'weatherStationName'
   yearBuilt          | number  | Year in which the building was constructed
 
 Imported sites always receive the 'site' tag, plus any user-specified template.
-If 'tz' is not provided, imported sites also receive the time zone of their
-associated weather station (if available) or the default project time zone.
+If a 'tz' column is not provided, imported weather stations also receive a 'tz'
+tag from the 'tz' import option (default = 'now().tz').
 
 Space Column Specification [#spaceColSpec]
 ------------------------------------------
@@ -183,20 +205,26 @@ Default column specification for `csvImportSpaces`:
 
   Tag          | Type    | Description
   ------------ | ------- | --------------------------------------------------------------------------
-  spaceName    | string  | Name of space; converted to 'navName' tag
+  dis          | string  | Space display name
+  navName      | string  | Space navigation name (alternative to 'dis')
   spaceTags    | tags    | Arbitrary set of tags to apply
+  area         | number  | Floor area of space
   floor        | marker  | Sets the 'floor' marker
   floorNum     | integer | Floor number per European convention
-  ground       | marker  | Sets the 'ground' marker
-  roof         | marker  | Sets the 'roof' marker
+  room         | marker  | Sets the 'room' marker
   siteName     | string  | Associated site name; used to construct 'siteRef' via named-based matching
   siteRef      | ref     | Site ref; overrides 'siteName'
-  subterranean | marker  | Sets the 'subterranean' marker
+  spaceName    | string  | Parent space name; used to construct 'spaceRef' via named-based matching
+  spaceRef     | ref     | Space ref; overrides 'spaceName'
+  zone         | marker  | Sets the 'zone' marker
 
 Imported spaces always receive the 'space' tag, plus any user-specified
-template. In addition, any imported space records that lack a 'dis' or
-'disMacro' tag receive the default 'disMacro:"$siteRef $navName"'. (A custom
-'disMacro' may be specified using the 'template' option.)
+template. In addition, any imported space records that lack the 'dis' and
+'disMacro' tags but include a 'navName' tag receive a default display macro:
+
+  disMacro:"$siteRef $navName"'
+  
+A custom 'disMacro' may be specified using the 'template' option.
 
 Equip Column Specification [#equipColSpec]
 ------------------------------------------
@@ -205,17 +233,23 @@ Default column specification for `csvImportEquips`:
 
   Tag          | Type    | Description
   ------------ | ------- | ----------------------------------------------------------------------------
-  equipName    | string  | Name of equipment; converted to 'navName' tag
+  dis          | string  | Equipment display name
+  navName      | string  | Equipment navigation name (alternative to 'dis')
   equipTags    | tags    | Arbitrary set of tags to apply
+  equipName    | string  | Parent equip name; used to construct 'equipRef' via named-based matching
+  equipRef     | ref     | Equip ref; overrides 'equipName'
   siteName     | string  | Associated site name; used to construct 'siteRef' via named-based matching
   siteRef      | ref     | Site ref; overrides 'siteName'
   spaceName    | string  | Associated space name; used to construct 'spaceRef' via named-based matching
   spaceRef     | ref     | Space ref; overrides 'spaceName'
 
 Imported equipment always receive the 'equip' tag, plus any user-specified
-template. In addition, any imported equip records that lack a 'dis' or
-'disMacro' tag receive the default 'disMacro:"$siteRef $navName"'. (A custom
-'disMacro' may be specified using the 'template' option.)
+template. In addition, any imported equip records that lack the 'dis' and
+'disMacro' tags but include a 'navName' tag receive a default display macro:
+
+  disMacro:"$siteRef $navName"'
+  
+A custom 'disMacro' may be specified using the 'template' option.
 
 Point Column Specification [#pointColSpec]
 ------------------------------------------
@@ -224,7 +258,8 @@ Default column specification for `csvImportPoints`:
 
   Tag                | Type    | Description
   ------------------ | ------- | ------------------------------------------------------------------------------------
-  pointName          | string  | Name of point; converted to 'navName' tag
+  dis                | string  | Point display name
+  navName            | string  | Point navigation name (alternative to 'dis')
   pointTags          | tags    | Arbitrary set of tags to apply
   equipName          | string  | Associated equip name; used to construct 'equipRef' via named-based matching
   equipRef           | ref     | Equip ref; overrides 'equipName'
@@ -239,47 +274,23 @@ Default column specification for `csvImportPoints`:
   weatherStationRef  | ref     | Weather station ref; overrides 'weatherStationName'
 
 Imported points always receive the 'point' tag, plus any user-specified
-template. In addition, any imported point records that lack a 'dis' or
-'disMacro' tag receive a default of:
+template. In addition, any imported equip records that lack the 'dis' and
+'disMacro' tags but include a 'navName' tag receive a default display macro:
 
 - Regular points: 'disMacro:"$equipRef $navName"'
 - Weather points: 'disMacro:"$weatherStationRef $navName"'
 
-(A custom 'disMacro' may be specified using the 'template' option.)
+A custom 'disMacro' may be specified using the 'template' option.
 
 If 'tz' is not provided, imported points are also assigned a time zone based on
 one of the following (in priority order):
 
 1. The associated site
 2. The associated weather station
-3. The default project.
+3. The 'tz' import option (default = 'now().tz').
 
 For minimum Haystack compliance, 'pointTags' should include one of 'sensor',
 'cmd', or 'sp' (or these tags should be imported via other columns).
-
-Weather Station Column Specification [#weatherStationColSpec]
--------------------------------------------------------------
-
-Default column specification for `csvImportWeatherStations`:
-
-  Tag                | Type    | Description
-  ------------------ | ------- | ------------------------------------------------
-  weatherStationName | string  | Name of weather station; converted to 'dis' tag
-  weatherStationTags | tags    | Arbitrary set of tags to apply
-  geoAddr            | string  | Full address
-  geoStreet          | string  | Street address
-  geoCity            | string  | City
-  geoCounty          | string  | Subdivision of state/province
-  geoState           | string  | State or province
-  geoCountry         | string  | Country code
-  geoPostalCode      | string  | Postal code (ZIP code, in USA)
-  geoCoord           | coord   | Latitude/longitude in decimal format
-  geoElevation       | number  | Elevation above sea level
-  tz                 | string  | String designation for weather station time zone
-
-Imported weather stations always receive the 'weatherStation' tag, plus any
-user-specified template. If 'tz' is not provided, imported weather stations also
-receive the default project time zone.
 
 Sequencing Imports [#importSequence]
 ====================================
@@ -292,26 +303,37 @@ For best matching of refs, use the following import sequence:
 4. Equipment
 5. Points
 
+If any entities of the same type are nested (e.g. [rooms]`room` within
+[floors]`floor`), split them into separate files and import the parents prior to
+the children.
+
 Importing History [#importHis]
 ******************************
 
 `csvImportHistory` imports time series data from a CSV source and writes it to
 point histories.
 
-Workflow [#importHisWorkflow]
+Overview [#importHisOverview]
 =============================
 
-`csvImportHistory` imports CSV data from a single **handle** (String or Uri),
-processes it, and writes it to one or more **points**. To receive CSV data, each
+`csvImportHistory` imports CSV data from a single 'handle' (String or Uri),
+processes it, and writes it to one or more 'points'. To receive CSV data, each
 point record must:
 
-1. Be of 'kind' "Number", "Bool", or "Str"
+1. Be of 'kind' [Number]`docHaystack::Kinds#number`,
+   [Bool]`docHaystack::Kinds#bool`, or [Str]`docHaystack::Kinds#str`
 2. Define the 'his' tag
 3. Define the 'csvColumn' tag
 
-Import control is provided by a set of global
-[options]`ext-nrelCsv::doc#importHisTs` passed via **opts** and by a set
-of tags attached to the target point records:
+Import control and customization is provided by
+[tags]`ext-nrelCsv::doc#importHisTags` attached to each target point record and
+a set of function [options]`ext-nrelCsv::doc#importHisOpts` passed via the
+'opts' argument.
+
+Control Tags [#importHisTags]
+-----------------------------
+
+The control tags for `csvImportHistory` are:
 
 - 'csvColumn': (Required) A string or integer specifying the CSV data column
   that contains the target point's history
@@ -319,26 +341,60 @@ of tags attached to the target point records:
   - Integer: Specifies CSV column by position (1st column has position 0)
 - 'csvUnit': String specifying the units of numeric CSV data
 - 'csvCallback': Optional callback function to be applied to the CSV data;
-  follows the same conventions as [OnWrite]`ext-his::doc#onWrite` callbacks
+  follows the same conventions as [OnWrite]`lib-his::doc#onWrite` callbacks
 - 'csvConvert': Optional point value conversion as described in
-  [Point Conversion]`ext-point::doc#convert` to be applied to the CSV data
+  [Point Conversion]`lib-point::doc#convert` to be applied to the CSV data
 - 'csvRollupInterval': Number that defines a rollup interval for the CSV data
 - 'csvRollupFunc': String that defines a rollup function for the CSV data
 
-Only the 'csvColumn' tag is required. The other tags are optional, but provide a
+Only the 'csvColumn' tag is required. All other tags are optional, but provide a
 flexible framework for post-processing the imported CSV data prior to writing
-history to the target points. The key to properly specifying these tags to
-achieve a desired import workflow is understanding the order of operations that
-occur during data import:
+history to the target points.
 
-1. Raw data are read from **handle**.
-2. The raw data are filtered based on the provided **points**:
-   - The 'tsColumn' option specifies the timestamp column(s).
+Control Options [#importHisOpts]
+--------------------------------
+
+Control options for `csvImportHistory` are passed as name-value pairs within
+the 'opts' argument. The following options are supported:
+
+- 'checked': Boolean; if 'true' then throw an error on parsing failures; if
+  'false' insert 'NA' for CSV data that fails to parse (default = 'true')
+- 'delimiter': passed through to `ioReadCsv`
+- 'noHeader': passed through to `ioReadCsv`
+- 'noWarn': Boolean; if 'true' suppress warnings (default = 'false')
+- 'overwrite': Boolean; allows existing history to be
+  [overwritten]`ext-nrelCsv::doc#importHisOverwrite`, ignoring 'hisEnd'
+  (default = 'false')
+- 'preview': enables [preview mode]`ext-nrelCsv::doc#importHisPreview` and
+  specifies the number of rows to preview for each point
+- 'span': time span for which to write history; anything accepted by `toSpan`
+- 'tsColumn': specifies the timestamp column(s) (default = '"ts"'; see
+  [parsing timestamps]`ext-nrelCsv::doc#importHisTs`)
+- 'tsPattern': pattern(s) for parsing CSV timestamps (see
+  [parsing timestamps]`ext-nrelCsv::doc#importHisTs`)
+- 'tz': time zone for CSV timestamps (default = 'now().tz')
+
+The 'checked' and 'noWarn' options may be also be passed as markers, with 'x'
+equivalent to 'x:true' and '-x' equivalent to'x:false'. If the 'preview' option
+is provided as a marker, it defaults to 'preview:10'.
+
+Workflow [#importHisWorkflow]
+-----------------------------
+
+The key to properly specifying these tags and options to achieve a desired
+import workflow is understanding the order of operations that occur during data
+import:
+
+1. Raw data are read from 'handle'.
+2. The raw data are filtered based on the provided 'points':
+   - The 'tsColumn' [option]`ext-nrelCsv::doc#importHisOpts` specifies the
+     timestamp column(s).
    - Each point's 'csvColumn' tag specifies the value column.
 3. If the timestamp is composite (made of multiple columns), timestamps are
    consolidated into a single column (see
    [timestamp pattern]`ext-nrelCsv::doc#importHisTsPattern`).
-4. Timestamps are parsed according to the 'tsPattern' option (see
+4. Timestamps are parsed according to the 'tsPattern'
+   [option]`ext-nrelCsv::doc#importHisOpts` (see
    [parsing timestamps]`ext-nrelCsv::doc#importHisTs`).
 5. Values are parsed according to the point's 'kind' tag (see
    [parsing values]`ext-nrelCsv::doc#importHisVals`).
@@ -349,43 +405,25 @@ occur during data import:
      point's 'unit' tag (if any) will be used instead.
 6. The data are sorted ascending by timestamp.
 7. If the point has a 'csvCallback' tag, the specified callback function is
-   applied to the imported data.
+   applied to the imported data (see
+   [callbacks]`ext-nrelCsv::doc#importHisCallback`).
 8. If the point has a 'csvConvert' tag, the specified point conversion is
    applied to the imported data using `pointConvert`.
 9. If the point has a 'csvRollupInterval' tag, the data are rolled up to the
-   specified interval via `hisRollup`:
-   - The 'csvRollupFunc' tag specifies the rollup function to use.
-   - If 'csvRollupFunc' is missing, then `hisRollupAuto` is used instead.
+   specified interval:
+   - If the 'csvRollupFunc' tag is present, `hisRollup` is called using the
+     specified rollup function.
+   - If the 'csvRollupFunc' tag is missing, `hisRollupAuto` is used instead.
 10. Numeric values are converted from their original unit to the point's
     SkySpark unit.
 11. Timestamps are converted to the point's time zone.
-12. Data rows with timestamps that overlap with the point's existing history
-   (timestamps prior to the point's 'hisEnd' tag) are dropped.
-13. The data are written to SkySpark history (which triggers the
-    [OnWrite]`ext-his::doc#onWrite` action if the `hisOnWrite` tag is defined).
-
-Options [#importHisOpts]
-========================
-
-Control options for `csvImportHistory` are passed as name-value pairs within
-**opts**. The following options are supported:
-
-- 'checked': Boolean; if 'true' then throw an error on parsing failures; if
-  'false' insert 'NA' for CSV data that fails to parse (default = 'true')
-- 'delimiter': column delimiter character; passed through to `ioReadCsv`
-- 'noHeader': passed through to `ioReadCsv`
-- 'noWarn': Boolean; if 'true' suppress warnings (default = 'false')
-- 'preview': enables [preview mode]`ext-nrelCsv::doc#importHisPreview` and
-  specifies the number of rows to preview for each point
-- 'tsColumn': specifies the timestamp column(s) (default = '"ts"'; see
-  [parsing timestamps]`ext-nrelCsv::doc#importHisTs`)
-- 'tsPattern': pattern(s) for parsing CSV timestamps (see
-  [parsing timestamps]`ext-nrelCsv::doc#importHisTs`)
-- 'tz': time zone for CSV timestamps (default = 'now().tz')
-
-The 'checked' and 'noWarn' options may be also be passed as markers, with 'x'
-equivalent to 'x:true' and '-x' equivalent to'x:false'. If the 'preview' option
-is given as a marker, it defaults to 'preview:10'.
+12. If the 'span' [option]`ext-nrelCsv::doc#importHisOpts` is specified, data
+    rows with timestamps outside of 'span' are dropped.
+13. Data rows with timestamps that overlap with the point's existing history
+   (timestamps prior to the point's 'hisEnd' tag) are dropped (unless the
+   'overwrite' [option]`ext-nrelCsv::doc#importHisOpts` is set).
+14. The data are written to SkySpark history (which triggers the
+    [OnWrite]`ext-his::doc#onWrite` action if a `hisOnWrite` tag is defined).
 
 Parsing Timestamps [#importHisTs]
 =================================
@@ -419,9 +457,9 @@ valid dateTime patterns per `sys::Time.toLocale`.
   successful or they have all been exhausted
 - If the timestamp directly encodes timezone information, then 'tz' is silently
   ignored 
-- Multiple columns: timestamp columns are concatenated in order by '" "' prior
-  to parsing; 'tsPattern' must reflect the expected pattern of the concatenated
-  columns
+- Multiple columns: timestamp columns are concatenated in order by '" "' (space)
+  prior to parsing; 'tsPattern' must reflect the expected pattern of the
+  concatenated columns
 
 Parsing Values [#importHisVals]
 ===============================
@@ -436,13 +474,43 @@ NA values are returned in the following circumstances:
 - NA is explicitly encoded in the CSV data
 - On parsing error and 'checked' is false
 
+For 'kind:"Str"', the string is returned as-is (NA, null, etc. keywords are not
+parsed). To detect and handle NA values (or any other special cases), use the
+'csvCallback' option or an `hisOnWrite` function.
+
+Callbacks [#importHisCallback]
+==============================
+
+The 'csvCallback' tag defines a callback function to be applied to the imported
+history data after initial import. The syntax follows the same conventions as
+[OnWrite]`lib-his::doc#onWrite` functions. The tag value must be the name of a
+valid function record. For security reasons, lambda functions and partial
+application syntax are not supported at this time.
+
+Overwriting History [#importHisOverwrite]
+=========================================
+
+By default, 'csvImportHistory()' drops values prior to each point's 'hisEnd'
+before writing data. This prevents overwriting existing data. To intentionally
+overwrite existing history, use the following options:
+
+1. Set the 'span' option to the time span you wish to overwrite
+2. Set the 'overwrite' option to true
+
+If 'span' is not provided, then the 'overwrite' option is ignored, with a
+warning. When using overwrite, it is recommended to also set 'noWarn' to true to
+avoid filling the log with history out-of-order warnings.
+
 Previewing Data [#importHisPreview]
 ===================================
 
 The 'preview' option enables preview mode. In preview mode, `csvImportHistory`
-returns a list of history grids previewing the data import and does not write
-the imported history to the database. The number of rows per point is limited to
-the numeric value of 'preview'.
+returns a combined history grid previewing the data import but does not write
+the imported history to the database. The number of rows per point (data column)
+is limited to the numeric value of 'preview'; see
+[options]`ext-nrelCsv::doc#importHisOpts`. (The total number of rows may be
+greater than 'preview' if not all rows of the original CSV file include values
+for every point.)
 
 Error Handling [#importHisErrors]
 =================================
@@ -462,4 +530,99 @@ General errors are always logged and thrown, regardless of the 'checked' and
 Exporting History [#exportHis]
 ******************************
 
-Not yet supported
+`csvExportHistory` exports point history to a CSV file, optionally with some
+convenience processing. The function arguments are:
+
+- 'points': Point(s) for which to export history (may be any value supported by
+  `toRecList`)
+- 'span': Timespan for which to export history (may be any value supported by
+  `toSpan`)
+- 'handle': Uri of output file
+- 'opts': Dict of control [options]`ext-nrelCsv::doc#exportHisOpts`
+
+Control Options [#exportHisOpts]
+--------------------------------
+
+Control options for `csvExportHistory` are passed as name-value pairs within
+the 'opts' argument. The following options are supported:
+
+- 'clean': Boolean; if 'true' then numeric data will be range-cleaned prior to
+  export (see [range cleaning]`ext-nrelCsv::doc#exportHisRangeCleaning`)
+  (default = false)
+- 'defVal': Number or NA; governs range cleaning behavior (see
+  [range cleaning]`ext-nrelCsv::doc#exportHisRangeCleaning`)
+- 'delimiter': passed through to `ioWriteCsv`
+- 'headerUnits': Boolean; if true then units will be appended to data column
+  headers (default = 'true')
+- 'interpolate': Boolean; if true then the data will be interpolated
+  (default = 'false')
+- 'interval': Number; optional rollup interval (default = none)
+- 'noHeader': passed through to `ioWriteCsv`
+- 'preview': enables [preview mode]`ext-nrelCsv::doc#exportHisPreview` and
+  specifies the number of rows to preview
+- 'removeUnits': Boolean; if true then units will be removed from numerical data
+  prior to export (default = 'true')
+- 'tsPattern': Str; Optional timestamp [format pattern]`format`
+
+The 'clean', 'headerUnits', 'interpolate', and 'removeUnits' options may be also
+be passed as markers, with 'x' equivalent to 'x:true' and '-x' equivalent to
+'x:false'. If the 'preview' option is provided as a marker, it defaults to
+'preview:10'.
+
+Workflow [#exportHisWorkflow]
+-----------------------------
+
+The export workflow is as follows:
+
+1. Read data
+2. Roll up using `hisRollupAuto` (if 'interval' is provided)
+3. Interpolate gaps (if 'interpolate' is true)
+4. Apply `hisClip`
+5. Remove units from numeric data (if 'removeUnits' is true)
+6. Add units to column headers (if 'headerUnits' is true)
+7. Format timestamps
+8. Write CSV output to 'handle' using `ioWriteCsv`
+
+If 'preview' is set, then step 8 instead returns a preview of the output that
+would have been written.
+
+Previewing Export [#exportHisPreview]
+=====================================
+
+The 'preview' option enables preview mode. In preview mode, `csvExportHistory`
+returns a grid previewing the data export but does not write to file. The total
+number of rows is limited to the numeric value of 'preview'; see
+[options]`ext-nrelCsv::doc#exportHisOpts`.
+
+Convenience Processing [#exportHisProcessing]
+=============================================
+
+Range Cleaning [#exportHisRangeCleaning]
+----------------------------------------
+
+If the 'clean' option is 'true', values outside the range '[minVal, maxVal]', as
+defined by the point's `minVal` and `maxVal` tags, are removed from the data set.
+(Missing 'minVal' and 'maxVal' tags imply permissible minimum and maximum values
+of negative and positive infinity, respectively.)
+  
+If the 'defVal' option is also provided, values removed are replaced with
+'defVal'; otherwise, they are replaced with 'Null'. Optionally, 'defVal' may be
+defined as a tag on each point; 'defVal' point tags override the global option
+on a per-point basis.
+  
+Range cleaning is performed prior to rollup and/or interpolation.
+  
+Rollup [#exportHisRollup]
+-------------------------
+
+If the 'interval' option is provided, data are rolled up at the specified
+interval using `hisRollupAuto`. (For maximum compatibility with other software,
+Boolean points are instead rolled up using `durTrue`, then normalized by the
+interval to obtain a fractional value between 0 and 1.) Rollup occurs prior to
+interpolation.
+
+Interpolation [#exportHisInterpolation]
+---------------------------------------
+
+If 'interpolate' is 'true', the entire history grid is interpolated prior to
+export, following SkySpark's normal interpolation rules.
