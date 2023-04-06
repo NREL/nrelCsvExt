@@ -14,6 +14,11 @@ This file tracks notable changes to **nreCsvExt**. The format is based on
 
 - [Change log](https://github.com/NREL/nrelCsvExt/blob/main/CHANGELOG.md)
 
+### Changed
+
+- `csvImportHistory()` now tries `parseBool()` and `parseNumber()` first, before
+  falling back to `parseAuto()` on parsing failures
+
 ## [v0.9.5 Beta] (2023-04-02)
 
 [v0.9.5 Beta]: https://github.com/NREL/nrelCsvExt/releases/tag/v0.9.5
