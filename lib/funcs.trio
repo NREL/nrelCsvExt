@@ -296,7 +296,7 @@ func
 overridable
 src:
   (points, handle, opts:{}) => do
-    
+  
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Options
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -308,12 +308,12 @@ src:
       tsColumn: "ts",
       tz:       now().tz
     }, opts)
-    
+  
     // T/F options
     opts = opts.set("checked",   opts.has("checked")   and opts["checked"]   != false)
     opts = opts.set("noWarn",    opts.has("noWarn")    and opts["noWarn"]    != false)
     opts = opts.set("overwrite", opts.has("overwrite") and opts["overwrite"] != false)
-    
+  
     // Span
     if (opts["span"] == null and opts->overwrite) do
       // If span is unspecified, never overwrite
@@ -323,7 +323,7 @@ src:
       // Normalize span
       opts = opts.set("span", opts->span.toSpan)
     end
-      
+  
     // Valid pass-through options for ioReadCsv()
     ioOpts: opts.findAll() (v, n) => n.in(["delimiter", "noHeader"])
   
@@ -352,7 +352,7 @@ src:
         return "\"" + msg + "\""
       end
     end
-    
+  
     // Map CSV column by name (string) or index (integer)
     mapCsvColName: (n, columns) => do
       // By index
@@ -361,11 +361,11 @@ src:
       // By name
       n = n.toTagName
       if (columns.contains(n)) return n
-      
+  
       // Not found
       return null
     end
-    
+  
     // Parse timestamp
     parseTimestamp: (x, pattern, tz, checked) => try do
       // Default pattern
@@ -385,51 +385,45 @@ src:
         if (ts == null) do
           throw "Unable to parse timestamp \"" + x + "\" using any of the specified patterns: " + pattern.toStr
         end
-        
+  
         // No-op (prevents if/else statement code parsing error)
         null
-        
+  
       // Unexpected pattern
       else do
         throw "Unexpected timestamp pattern: " + pattern.toStr + " [" + debugType(pattern) + "]"
       end
-      
+  
       // Output
       return ts
-    
+  
     catch (ex) do
       if (checked) throw(ex)
       return null
     end
-    
+  
     // Parse value
     parseValue: (x, kind, checked) => do
       // Trim whitespace
       x = x.trim
-      
+  
       // Parse value...
-      
+  
       // Empty?
       if (x.isEmpty) do
         return null
-      
+  
       // String
       else if (kind == "Str") do
         return x
   
-      // Use parseAuto()
-      else do
-        val: parseAuto(x, checked)
-      end
-      
-      // Handle parsed value...
-  
-      // Encoded NA or null
-      if (val.isNA or val.isNull)
-        return val
-      
       // Boolean
       else if (kind == "Bool") do
+        // Attempt to parse as: Boolean, number, automatic
+        val: parseBool(x, false)
+        if (val.isNull) val = parseNumber(x, false)
+        if (val.isNull) val = parseAuto(x, checked)
+        
         // Boolean
         if (val.isBool) do
           return val
@@ -437,6 +431,10 @@ src:
         // Number -> Boolean
         else if (val.isNumber and not val.isNaN) do
           return (val != 0)
+  
+        // Encoded NA or null
+        else if (val.isNA or val.isNull)
+          return val
           
         // Unsupported
         else do
@@ -447,10 +445,18 @@ src:
   
       // Number
       else if (kind == "Number") do
+        // Attempt to parse as: Number, automatic
+        val: parseNumber(x, false)
+        if (val.isNull) val = parseAuto(x, checked)
+        
         // Number
         if (val.isNumber) do
           return val
-      
+        
+        // Encoded NA or null
+        else if (val.isNA or val.isNull)
+          return val
+          
         // Unsupported
         else do
           if (checked) throw "Unexpected kind for parsed value: " + val.toStr +
@@ -462,12 +468,12 @@ src:
       else do
         throw "Kind \"" + kind + "\" is not supported."
       end
-    end  
-    
+    end
+  
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // Write Point History to Folio
     //////////////////////////////////////////////////////////////////////////////////////////////////
-    
+  
     writePointHis: (point, timeCol, valCol, data, checked) => do
       // Check columns
       if (valCol == null or data.missing(valCol)) do
@@ -546,12 +552,12 @@ src:
       if (point.has("tz")) do
         data = data.map() row => row.set("ts", (row->ts).toTimeZone(point->tz))
       end
-      
+  
       // Drop any data outside of span
       if (opts.has("span")) do
         data = data.findAll() row => (row->ts >= opts->span.start) and (row->ts <= opts->span.end)
       end
-      
+  
       // Drop any data for which the point already has history
       if (point.has("hisEnd") and not opts->overwrite) do
         data = data.findAll() row => (row->ts > point->hisEnd)
