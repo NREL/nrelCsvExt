@@ -375,7 +375,7 @@ the 'opts' argument. The following options are supported:
 - 'tz': time zone for CSV timestamps (default = 'now().tz')
 
 The 'checked' and 'noWarn' options may be also be passed as markers, with 'x'
-equivalent to 'x:true' and '-x' equivalent to'x:false'. If the 'preview' option
+equivalent to 'x:true' and '-x' equivalent to 'x:false'. If the 'preview' option
 is provided as a marker, it defaults to 'preview:10'.
 
 Workflow [#importHisWorkflow]
