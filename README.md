@@ -2,16 +2,15 @@ nrelCsvExt: Import and Export Functions for CSV Data
 ====================================================
 
 **nrelCsvExt** is a [SkySpark] extension that provides utility functions for the
-import and export of CSV data implement in the [Axon] programming language. This
+import and export of CSV data implemented in the [Axon] programming language. This
 package is developed and provided free of charge by the
 [National Renewable Energy Laboratory].
 
-[SkySpark]: http://skyfoundry.com/skyspark/ "SkySpark"
-[Axon]: https://skyfoundry.com/doc/docHaxall/AxonLang "Axon Language"
-[National Renewable Energy Laboratory]: https://www.nrel.gov
-
 **nrelCsvExt** requires SkySpark 3.1 or later and [nrelUtilityExt] 1.1 or later.
 
+[SkySpark]: http://skyfoundry.com/skyspark/ "SkySpark"
+[Axon]: https://skyfoundry.com/doc/docHaxall/AxonLang "Axon Language"
+[National Renewable Energy Laboratory]: https://www.nrel.gov "NREL"
 [nrelUtilityExt]: https://github.com/NREL/nrelUtilityExt/ "NREL Utility Extension"
 
 Build
@@ -47,8 +46,6 @@ start (or restart) SkySpark.
 
 ### From GitHub ###
 
-*This package is not yet available on Github.com; currently on NREL internal Github only*
-
 1. Download a `nrelCsvExt.pod` release from GitHub.
 2. Copy `nrelCsvExt.pod` into the `lib/fan/` directory of your SkySpark
    installation.
@@ -61,11 +58,46 @@ start (or restart) SkySpark.
    - On Linux, you may need to `chmod +x bin/fan` first.
 6. Start (or restart) SkySpark.
 
-Help
-----
+### From StackHub ###
+
+**nrelCsvExt** is also available [from StackHub]. SkySpark supports direct
+installation via Stackhub:
+
+1. Open the *Host* app.
+2. Navigate to the *Install* tab.
+3. Click the *Install* button and search for "nrelCsvExt".
+4. Select the extension when it appears, click *Next*, select the desired
+   version, and complete the installation.
+
+[from StackHub]: https://stackhub.org/package/nrelCsvExt "StackHub"
+
+Documentation
+-------------
 
 Function documentation is available in the SkySpark *Doc* app under *nrelCsv* or
 within the *Docs* interface in the *Code* app.
+
+Contributing
+------------
+
+To contribute to `nrelUtilityExt`, please feel free to open an issue or a submit
+a pull request. If you want to modify the code, you can use `importFunctions()`
+and `exportFunctions()` from [nrelUtilityExt] to make your life easier.
+Suggested workflow:
+
+1. Put `lib/funcs.trio` in your SkySpark project's `io` directory
+2. Run:
+   ```
+   importFunctions(`io/funcs.trio`, merge:{nrelCsvExtDev})
+   ```
+3. Make changes
+4. Run:
+   ``` 
+   readAll(nrelCsvExtDev).exportFunctions(`io/funcs.trio`, merge:{-nrelCsvExtDev})
+   ```
+5. Commit the modified `funcs.trio` to your copy of the repo.
+
+Using the `nrelCsvExtDev` "flag" tag here makes it easy to locate and export the correct set of functions.
 
 License
 -------

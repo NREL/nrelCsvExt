@@ -296,11 +296,11 @@ func
 overridable
 src:
   (points, handle, opts:{}) => do
-    
+
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Options
     ////////////////////////////////////////////////////////////////////////////////////////////////
-  
+
     // Default options
     opts = merge({
       checked:  true,
@@ -308,12 +308,12 @@ src:
       tsColumn: "ts",
       tz:       now().tz
     }, opts)
-    
+
     // T/F options
     opts = opts.set("checked",   opts.has("checked")   and opts["checked"]   != false)
     opts = opts.set("noWarn",    opts.has("noWarn")    and opts["noWarn"]    != false)
     opts = opts.set("overwrite", opts.has("overwrite") and opts["overwrite"] != false)
-    
+
     // Span
     if (opts["span"] == null and opts->overwrite) do
       // If span is unspecified, never overwrite
@@ -323,10 +323,10 @@ src:
       // Normalize span
       opts = opts.set("span", opts->span.toSpan)
     end
-      
+
     // Valid pass-through options for ioReadCsv()
     ioOpts: opts.findAll() (v, n) => n.in(["delimiter", "noHeader"])
-  
+
     // Preview
     preview: opts["preview"]
     if (preview == marker()) do
@@ -334,16 +334,16 @@ src:
     else if (preview != null and not preview.isNumber) do
       throw "'preview' option must be a number."
     end
-  
+    
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Helper Functions
     ////////////////////////////////////////////////////////////////////////////////////////////////
-  
+
     // Handle argument string for error messages
     handleErrString: (val) => do
       // Uri
       if (val.isUri) return "`" + val.toStr + "`"
-  
+
       // Anything else (presumably a CSV-formatted string)
       msg: val.toStr
       if (msg.size > 100) do
@@ -352,118 +352,124 @@ src:
         return "\"" + msg + "\""
       end
     end
-    
+
     // Map CSV column by name (string) or index (integer)
     mapCsvColName: (n, columns) => do
       // By index
       if (n.isNumber) return getSafe(columns, n)
-  
+
       // By name
       n = n.toTagName
       if (columns.contains(n)) return n
-      
+
       // Not found
       return null
     end
-    
+
     // Parse timestamp
     parseTimestamp: (x, pattern, tz, checked) => try do
       // Default pattern
       if (pattern == null) do
         ts: parseDateTime(x)
-  
+
       // User-specified pattern
       else if (pattern.isStr) do
         ts: parseDateTime(x, pattern, tz, checked)
-  
+
       // Set of patterns
       else if (pattern.isList) do
         // Try patterns until one successed
         ts: pattern.eachWhile() (pat) => parseDateTime(x, pat, tz, false)
-  
+
         // If none was successful, throw an exception
         if (ts == null) do
           throw "Unable to parse timestamp \"" + x + "\" using any of the specified patterns: " + pattern.toStr
         end
-        
+
         // No-op (prevents if/else statement code parsing error)
         null
-        
+
       // Unexpected pattern
       else do
         throw "Unexpected timestamp pattern: " + pattern.toStr + " [" + debugType(pattern) + "]"
       end
-      
+
       // Output
       return ts
-    
+
     catch (ex) do
       if (checked) throw(ex)
       return null
     end
-    
+
     // Parse value
     parseValue: (x, kind, checked) => do
       // Trim whitespace
       x = x.trim
-      
+
       // Parse value...
-      
+
       // Empty?
       if (x.isEmpty) do
         return null
-      
+
       // String
       else if (kind == "Str") do
         return x
-  
-      // Use parseAuto()
-      else do
-        val: parseAuto(x, checked)
-      end
-      
-      // Handle parsed value...
-  
-      // Encoded NA or null
-      if (val.isNA or val.isNull)
-        return val
-      
+
       // Boolean
       else if (kind == "Bool") do
+        // Attempt to parse as: Boolean, number, automatic
+        val: parseBool(x, false)
+        if (val.isNull) val = parseNumber(x, false)
+        if (val.isNull) val = parseAuto(x, checked)
+
         // Boolean
         if (val.isBool) do
           return val
-  
+
         // Number -> Boolean
         else if (val.isNumber and not val.isNaN) do
           return (val != 0)
-          
+
+        // Encoded NA or null
+        else if (val.isNA or val.isNull)
+          return val
+
         // Unsupported
         else do
           if (checked) throw "Unexpected kind for parsed value: " + val.toStr +
             " [" + debugType(val) + "]; expected Bool or Number"
           return na()
         end
-  
+
       // Number
       else if (kind == "Number") do
+        // Attempt to parse as: Number, automatic
+        val: parseNumber(x, false)
+        if (val.isNull) val = parseAuto(x, checked)
+
         // Number
         if (val.isNumber) do
           return val
-      
+
+        // Encoded NA or null
+        else if (val.isNA or val.isNull)
+          return val
+
         // Unsupported
         else do
           if (checked) throw "Unexpected kind for parsed value: " + val.toStr +
             " [" + debugType(val) + "]; expected Number"
           return na()
         end
-  
+
       // Unsupported kind
       else do
         throw "Kind \"" + kind + "\" is not supported."
       end
-    end  
-    
+    end
+
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // Write Point History to Folio
     //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -473,19 +479,19 @@ src:
       if (valCol == null or data.missing(valCol)) do
         throw "'csvColumn' for point @" + point.toRecId.toStr + " was not found in imported CSV data."
       end
-  
+
       // Drop all but the two columns we need
       data = data.keepCols([timeCol, valCol])
-  
+
       // Drop rows which have empty timestamp or data
       data = data.findAll() row => row.has(timeCol) and row.has(valCol)
-  
+
       // Parse according to point metadata
       data = data.map() row => {
         ts: parseTimestamp(row[timeCol], opts["tsPattern"], opts["tz"], checked),
         val: parseValue(row[valCol], point["kind"], checked)
       }
-  
+
       // Drop incorrectly parsed rows (with a warning)
       before: size(data)
       data = data.findAll row => row.has("ts") and row.has("val")
@@ -493,73 +499,126 @@ src:
       if (not opts->noWarn and (after < before)) do
         logWarn("csvImportHistory", "Unable to parse " + (before - after) + " rows of data for column '" + valCol + "'.")
       end
-  
+
       // Apply units
       if (point->kind=="Number" and point.has("csvUnit")) do
         data = data.hisMap() v => if (v.isNA) v else v.as(point->csvUnit)
       end
-  
+
       // Sort on timestamp
       data = data.sort("ts")
-  
+
       // Apply callback function
       if (point.has("csvCallback")) do
-        // Apply transformation
-        data = call(point->csvCallback, [data, point])
+        // Data for task
+        taskInput: {
+          data: data,
+          point: point,
+          callbackExpr: point->csvCallback
+        }
+
+        // Execute callback in ephemeral task
+        data = taskRun(
+          // Task expression
+          (input) => do
+            // Regex for validating callback function expression
+            regexMatch: r"[a-z]\w*(\(.*\))?" // Matches "foo" or "foo(...)"
+            regexName: r"\A[a-z]\w*" // Matches function name
+
+            // Validate callback function
+            if (not reMatches(regexMatch, input->callbackExpr)) do
+              throw "Invalid syntax for callback function: " + input->callbackExpr
+            else if (func(reFind(regexName, input->callbackExpr), false).isNull) do
+              throw "Could not find callback function: " + reFind(regexName, input->callbackExpr)
+            else do
+              // Convert to function
+              callback: eval(input->callbackExpr)
+              if (not callback.isFunc) do
+                throw "Callback expression did not evaluate to a function: " + input->callbackExpr
+              end
+            end
+
+            // Apply callback
+            callback(input->data, input->point)
+          end,
+          taskInput // Passes data to task
+        ).futureGet
       end
-  
+      
       // Apply value conversion
       if (point.has("csvConvert")) do
         // Apply point conversion
         data = data.hisMap() v => if (v.isNA) v else pointConvert(point, point->csvConvert, v)
       end
-  
+
       // Apply rollup function
       if (point.has("csvRollupInterval")) do
-        // Rollup function
+        // User-specified rollup function
         if (point.has("csvRollupFunc")) do
-          // User-specified rollup function
-          data = data.hisRollup(
-            func(point->csvRollupFunc)->name.eval, // Safe(ish) way to find rollup function
-            point->csvRollupInterval
-          )
+          // Data for task
+          taskInput: {
+            data: data,
+            rollupFunc: func(point->csvRollupFunc)->name.eval, // Safe way to get rollup function
+            interval: point->csvRollupInterval
+          }
+
+          // Execute rollup in ephemeral task
+          data = taskRun(
+            // Task expression
+            (input) => do
+              hisRollup(input->data, input->rollupFunc, input->interval)
+            end,
+            taskInput // Passes data to task
+          ).futureGet
+
+        // Automatic rollup function 
         else do
-          // Automatic rollup function
-          data = data
-            .addColMeta("val", point)
-            .hisRollupAuto(point->csvRollupInterval)
+          // Data for task
+          taskInput: {
+            data: data.addColMeta("val", point),
+            interval: point->csvRollupInterval
+          }
+          
+          // Execute rollup in ephemeral task
+          data = taskRun(
+            // Task expression
+            (input) => do
+              hisRollupAuto(input->data, input->interval)
+            end,
+            taskInput // Passes data to task
+          ).futureGet
         end
-  
+      
         // Drop rows for which rollup function produced null data
         data = data.findAll() row => row.has("ts") and row.has("val")
-  
+
         // Return if empty (no new data)
         if (data.isEmpty) return null
       end
-  
+
       // Convert to SkySpark units
       if (point->kind=="Number") do
         data = data.hisMap() v => if (v.isNA) v else v.to(point["unit"])
       end
-  
+
       // Convert from input timezone to point timezone
       if (point.has("tz")) do
         data = data.map() row => row.set("ts", (row->ts).toTimeZone(point->tz))
       end
-      
+
       // Drop any data outside of span
       if (opts.has("span")) do
         data = data.findAll() row => (row->ts >= opts->span.start) and (row->ts <= opts->span.end)
       end
-      
+
       // Drop any data for which the point already has history
       if (point.has("hisEnd") and not opts->overwrite) do
         data = data.findAll() row => (row->ts > point->hisEnd)
       end
-  
+
       // Return if empty (no new data)
       if (data.isEmpty) return null
-  
+
       // Preview?
       if (preview != null) do
         data = data
@@ -567,22 +626,22 @@ src:
           .addColMeta("val", point)
         return getSafe(data, 0..(preview))
       end
-  
+
       // Write history to point
       if (opts->noWarn) do
         data.hisWrite(point, {noWarn})
       else do
         data.hisWrite(point)
       end
-  
+
       // Return processed point id
       return {id:point["id"]}
     end
-  
+
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // Main
     //////////////////////////////////////////////////////////////////////////////////////////////////
-  
+    
     // Read CSV
     try do
       data: ioReadCsv(handle, ioOpts)
@@ -592,7 +651,7 @@ src:
       logErr("csvImportHistory", "Error importing CSV from provided handle: " + handleErrString(handle), ex)
       throw (ex)
     end
-  
+
     // Timestamp column name
     if (opts->tsColumn.isList) do
       // Composite timestamp
@@ -603,26 +662,40 @@ src:
       tsCol:     opts->tsColumn.mapCsvColName(headers)
       tsColList: [tsCol]
     end
-  
+
     // Check timestamp column
     if (any(tsColList, isNull)) do
       msg: "Invalid timestmap column(s) for handle " + handleErrString(handle) + "."
       logErr("csvImportHistory", msg)
       throw msg
     end
-  
+
     // Get points of interest and map/check column names
     points = points
       .toRecList
       .findAll(p => p.has("csvColumn"))
       .map(p => p.set("csvColumnMatched", mapCsvColName(p->csvColumn, headers)))
-  
+    
+    // Require task extension (callbacks and rollups)
+    if (read(ext=="task", false).isNull) do
+      // Need task extension?
+      needTask: 
+        points.any(p => p["csvCallback"] != null) or // callbacks
+        points.any(p => p["csvRollupInterval"] != null) // rollups
+      
+      // Throw error if we need tasks but don't have them
+      if (needTask) do
+        throw "To use 'csvCallback' or 'csvRollupInterval', " +
+          "the task extension must be loaded."
+      end
+    end
+    
     // Keep CSV headers: timestamp + CSV data column names from point metadata
     keepHeaders: tsColList.addAll(points.map() p => p["csvColumnMatched"]).removeNull
-  
+
     // Subset to needed columns
     data = data.keepCols(keepHeaders)
-  
+    
     // Consolidate composite timestamp to single column
     if (tsColList.size > 1) do
       try do
@@ -636,7 +709,7 @@ src:
         throw (ex)
       end
     end
-  
+
     // Extract relevant data for each rec and store to Folio
     errorFound: false
     points = points.toRecList.map() p => do
@@ -655,21 +728,19 @@ src:
       end
       return p
     end
-  
+
     // Handle errors
     if (errorFound) throw "Errors occurred while importing CSV history from handle " + handleErrString(handle) + "; see log."
-  
-    // Preview mode
-    if (preview != null) return points.removeNull.hisJoin // <-- Will contain time series data
-  
-    // Re-read and return list of all affected recs
+
+    // Check for empty result
     points = points.removeNull
-    if (points.isEmpty) do
-      return null
-    else do
-      return points.toRecIdList.readByIds
-    end
-  
+    if (points.isEmpty) return null
+
+    // Preview mode
+    if (preview != null) return points.hisJoin // <-- Will contain time series data
+
+    // Re-read and return list of all affected recs
+    return points.toRecIdList.readByIds
   end
 ---
 name:csvImportPoints

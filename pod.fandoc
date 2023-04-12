@@ -375,7 +375,7 @@ the 'opts' argument. The following options are supported:
 - 'tz': time zone for CSV timestamps (default = 'now().tz')
 
 The 'checked' and 'noWarn' options may be also be passed as markers, with 'x'
-equivalent to 'x:true' and '-x' equivalent to'x:false'. If the 'preview' option
+equivalent to 'x:true' and '-x' equivalent to 'x:false'. If the 'preview' option
 is provided as a marker, it defaults to 'preview:10'.
 
 Workflow [#importHisWorkflow]
@@ -410,10 +410,7 @@ import:
 8. If the point has a 'csvConvert' tag, the specified point conversion is
    applied to the imported data using `pointConvert`.
 9. If the point has a 'csvRollupInterval' tag, the data are rolled up to the
-   specified interval:
-   - If the 'csvRollupFunc' tag is present, `hisRollup` is called using the
-     specified rollup function.
-   - If the 'csvRollupFunc' tag is missing, `hisRollupAuto` is used instead.
+   specified interval (see [rollups]`ext-nrelCsv::doc#importHisRollup`).
 10. Numeric values are converted from their original unit to the point's
     SkySpark unit.
 11. Timestamps are converted to the point's time zone.
@@ -483,9 +480,29 @@ Callbacks [#importHisCallback]
 
 The 'csvCallback' tag defines a callback function to be applied to the imported
 history data after initial import. The syntax follows the same conventions as
-[OnWrite]`lib-his::doc#onWrite` functions. The tag value must be the name of a
-valid function record. For security reasons, lambda functions and partial
-application syntax are not supported at this time.
+[OnWrite]`lib-his::doc#onWrite` functions. The tag value must reference a valid
+top-level function. Partial application is supported. Lambda functions are not
+supported.
+
+For security reasons, the callback function executes within an
+[ephemeral task]`lib-task::doc#ephemeralTasks` with the permissions of the
+synthetic task [user]`lib-task::doc#security`. If the task extension is not
+loaded, attempting to use 'csvCallback' will throw an error.
+
+Rollups [#importHisRollup]
+==========================
+
+The 'csvRollupInterval' tag enables automatic rollup of imported history before
+writing data. Rollup behavior is as follows:
+
+- If the 'csvRollupFunc' tag is present, `hisRollup` is called using the
+  specified rollup function.
+- If the 'csvRollupFunc' tag is missing, `hisRollupAuto` is used instead.
+
+'csvRollupFunc' must be the name of a valid top-level function. Like
+[callbacks]`ext-nrelCsv::doc#importHisCallback`, history rollups execute within
+an ephemeral task for security reasons and require the task extension to be
+loaded.
 
 Overwriting History [#importHisOverwrite]
 =========================================
@@ -497,7 +514,7 @@ overwrite existing history, use the following options:
 1. Set the 'span' option to the time span you wish to overwrite
 2. Set the 'overwrite' option to true
 
-If 'span' is not provided, then the 'overwrite' option is ignored, with a
+If 'span' is not provided, then the 'overwrite' option is ignored, with a logged
 warning. When using overwrite, it is recommended to also set 'noWarn' to true to
 avoid filling the log with history out-of-order warnings.
 
