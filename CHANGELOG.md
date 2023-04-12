@@ -18,6 +18,9 @@ This file tracks notable changes to **nreCsvExt**. The format is based on
 
 - `csvImportHistory()` now tries `parseBool()` and `parseNumber()` first, before
   falling back to `parseAuto()` on parsing failures
+- `csvImportHistory()` now executes callback functions and rollups within tasks
+  for enhanced security
+- The `csvCallback` tag now supports partial application function syntax
 
 ## [v0.9.5 Beta] (2023-04-02)
 
