@@ -10,6 +10,11 @@ This file tracks notable changes to **nreCsvExt**. The format is based on
 
 [View Changes](https://github.com/NREL/nrelCsvExt/compare/main...develop)
 
+### Fixed
+
+- `csvImportHistory()` no longer crashes and also provides useful warnings
+  when a value column is present in the source file but contains no data
+
 ## [v0.9.6 Beta] (2023-04-11)
 
 [v0.9.6 Beta]: https://github.com/NREL/nrelCsvExt/releases/tag/v0.9.6

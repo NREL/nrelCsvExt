@@ -334,7 +334,7 @@ src:
     else if (preview != null and not preview.isNumber) do
       throw "'preview' option must be a number."
     end
-    
+
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Helper Functions
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -473,33 +473,47 @@ src:
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // Write Point History to Folio
     //////////////////////////////////////////////////////////////////////////////////////////////////
-    
+
     writePointHis: (point, timeCol, valCol, data, checked) => do
       // Check columns
       if (valCol == null or data.missing(valCol)) do
         throw "'csvColumn' for point @" + point.toRecId.toStr + " was not found in imported CSV data."
       end
-
+      
       // Drop all but the two columns we need
       data = data.keepCols([timeCol, valCol])
-
-      // Drop rows which have empty timestamp or data
+      
+      // Drop rows which have empty timestamp or data (with a warning)
+      before: size(data)
       data = data.findAll() row => row.has(timeCol) and row.has(valCol)
+      after: size(data)
+      if (not opts->noWarn and (after < before)) do
+        logWarn("csvImportHistory", "Column '" + valCol + "': Dropped " + (before - after) +
+          " rows of data that are missing a timestamp and/or value.")
+      end
 
       // Parse according to point metadata
       data = data.map() row => {
         ts: parseTimestamp(row[timeCol], opts["tsPattern"], opts["tz"], checked),
         val: parseValue(row[valCol], point["kind"], checked)
       }
-
+      
       // Drop incorrectly parsed rows (with a warning)
-      before: size(data)
+      before = size(data)
       data = data.findAll row => row.has("ts") and row.has("val")
-      after: size(data)
+      after = size(data)
       if (not opts->noWarn and (after < before)) do
         logWarn("csvImportHistory", "Unable to parse " + (before - after) + " rows of data for column '" + valCol + "'.")
       end
-
+      
+      // Return if empty (with a warning)
+      if (data.isEmpty) do
+        if (not opts->noWarn and (after < before)) do
+          logWarn("csvImportHistory", "Grid for column '" + valCol + "' is empty after parsing.")
+        end
+        return null
+      end
+      
       // Apply units
       if (point->kind=="Number" and point.has("csvUnit")) do
         data = data.hisMap() v => if (v.isNA) v else v.as(point->csvUnit)
@@ -544,7 +558,7 @@ src:
           taskInput // Passes data to task
         ).futureGet
       end
-      
+
       // Apply value conversion
       if (point.has("csvConvert")) do
         // Apply point conversion
@@ -578,7 +592,7 @@ src:
             data: data.addColMeta("val", point),
             interval: point->csvRollupInterval
           }
-          
+
           // Execute rollup in ephemeral task
           data = taskRun(
             // Task expression
@@ -588,7 +602,7 @@ src:
             taskInput // Passes data to task
           ).futureGet
         end
-      
+
         // Drop rows for which rollup function produced null data
         data = data.findAll() row => row.has("ts") and row.has("val")
 
@@ -641,7 +655,7 @@ src:
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // Main
     //////////////////////////////////////////////////////////////////////////////////////////////////
-    
+
     // Read CSV
     try do
       data: ioReadCsv(handle, ioOpts)
@@ -675,27 +689,27 @@ src:
       .toRecList
       .findAll(p => p.has("csvColumn"))
       .map(p => p.set("csvColumnMatched", mapCsvColName(p->csvColumn, headers)))
-    
+
     // Require task extension (callbacks and rollups)
     if (read(ext=="task", false).isNull) do
       // Need task extension?
       needTask: 
         points.any(p => p["csvCallback"] != null) or // callbacks
         points.any(p => p["csvRollupInterval"] != null) // rollups
-      
+
       // Throw error if we need tasks but don't have them
       if (needTask) do
         throw "To use 'csvCallback' or 'csvRollupInterval', " +
           "the task extension must be loaded."
       end
     end
-    
+
     // Keep CSV headers: timestamp + CSV data column names from point metadata
     keepHeaders: tsColList.addAll(points.map() p => p["csvColumnMatched"]).removeNull
 
     // Subset to needed columns
     data = data.keepCols(keepHeaders)
-    
+
     // Consolidate composite timestamp to single column
     if (tsColList.size > 1) do
       try do
