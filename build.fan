@@ -18,7 +18,7 @@ class Build : BuildPod
     version = Version("0.9.5")
     meta    = [
                 "ext.name":        "nrelCsv",
-                "ext.depends":     "io,nrelUtility",
+                "ext.depends":     "io,task,nrelUtility",
                 "ext.icon":        "table",
                 "org.name":        "NREL",
                 "org.uri":         "https://www.nrel.gov/",
