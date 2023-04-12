@@ -10,6 +10,12 @@ This file tracks notable changes to **nreCsvExt**. The format is based on
 
 [View Changes](https://github.com/NREL/nrelCsvExt/compare/main...develop)
 
+## [v0.9.6 Beta] (2023-04-11)
+
+[v0.9.6 Beta]: https://github.com/NREL/nrelCsvExt/releases/tag/v0.9.6
+
+[View Changes](https://github.com/NREL/nrelCsvExt/compare/v0.9.5...v0.9.6)
+
 ### Added
 
 - [Change log](https://github.com/NREL/nrelCsvExt/blob/main/CHANGELOG.md)
