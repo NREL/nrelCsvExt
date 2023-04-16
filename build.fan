@@ -23,7 +23,7 @@ class Build : BuildPod
                 "org.name":        "NREL",
                 "org.uri":         "https://www.nrel.gov/",
                 "proj.name":       "NREL CSV Extension",
-                "proj.uri":        "https://github.nrel.gov/IntelligentCampus/nrelCsvExt",
+                "proj.uri":        "https://github.com/NREL/nrelCsvExt",
                 "license.name":    "BSD-3",
                 "skyspark.docExt": "true",
               ]
