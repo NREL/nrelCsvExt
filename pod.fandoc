@@ -67,14 +67,15 @@ argument. The following options are supported:
   them (default = 'false')
 - 'log': Boolean; if 'true' create a log entry for each committed record
   (default = 'false')
-- 'noWarn': Boolean; if 'true' suppress warnings (default = 'false')
+- 'warn': Boolean; if 'true' log warnings; if 'false' suppress them
+  (default = 'true')
 - 'datePattern': Pattern for parsing dates (for default, see `parseDate`)
 - 'dateTimePattern': Pattern for parsing dateTimes (for default, see
   `parseDateTime`)
 - 'timePattern': Pattern for parsing times (for default, see `parseTime`)
 - 'tz': Time zone for parsing dateTimes (default = 'now().tz')
 
-The 'checked', 'commit', 'log', 'and 'noWarn' options may be also be passed as
+The 'checked', 'commit', 'log', 'and 'warn' options may be also be passed as
 markers, with 'x' equivalent to 'x:true' and '-x' equivalent to 'x:false'. For
 date, time, and dateTime parsing patterns see `sys::Time.toLocale`.
 
@@ -109,7 +110,7 @@ Relationships for records are assigned using the following (in priority order):
    using the value to map the record to an existing entity by name/description
 
 If multiple sources exist, the higher-priority source is used with a warning
-(suppressable with the 'noWarn' option).
+(suppressable by setting the 'warn' option to false).
 
 Mapping refs by name requires matching each imported record to an existing
 target entity either by description (as returned by `dis()`; default) or by the
@@ -361,7 +362,8 @@ the 'opts' argument. The following options are supported:
   'false' insert 'NA' for CSV data that fails to parse (default = 'true')
 - 'delimiter': passed through to `ioReadCsv`
 - 'noHeader': passed through to `ioReadCsv`
-- 'noWarn': Boolean; if 'true' suppress warnings (default = 'false')
+- 'warn': Boolean; if 'true' log warnings; if 'false' suppress them
+  (default = 'true')
 - 'overwrite': Boolean; allows existing history to be
   [overwritten]`ext-nrelCsv::doc#importHisOverwrite`, ignoring 'hisEnd'
   (default = 'false')
@@ -374,7 +376,7 @@ the 'opts' argument. The following options are supported:
   [parsing timestamps]`ext-nrelCsv::doc#importHisTs`)
 - 'tz': time zone for CSV timestamps (default = 'now().tz')
 
-The 'checked' and 'noWarn' options may be also be passed as markers, with 'x'
+The 'checked' and 'warn' options may be also be passed as markers, with 'x'
 equivalent to 'x:true' and '-x' equivalent to 'x:false'. If the 'preview' option
 is provided as a marker, it defaults to 'preview:10'.
 
@@ -515,7 +517,7 @@ overwrite existing history, use the following options:
 2. Set the 'overwrite' option to true
 
 If 'span' is not provided, then the 'overwrite' option is ignored, with a logged
-warning. When using overwrite, it is recommended to also set 'noWarn' to true to
+warning. When using overwrite, it is recommended to also set 'warn' to false to
 avoid filling the log with history out-of-order warnings.
 
 Previewing Data [#importHisPreview]
@@ -537,12 +539,12 @@ encounters an import error is skipped and execution continues to the next point.
 Error logging is as follows:
 
 - If 'checked = true': Logged as errors, with an error thrown on function exit
-- If 'checked = false' and 'noWarn = false': Logged as warnings, with a clean
+- If 'checked = false' and 'warn = true': Logged as warnings, with a clean
   function exit
-- If 'checked = false' and 'noWarn = true': Not logged; clean function exit
+- If 'checked = false' and 'warn = false': Not logged; clean function exit
 
 General errors are always logged and thrown, regardless of the 'checked' and
-'noWarn' options.
+'warn' options.
 
 Exporting History [#exportHis]
 ******************************

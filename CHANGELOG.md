@@ -10,6 +10,11 @@ This file tracks notable changes to **nreCsvExt**. The format is based on
 
 [View Changes](https://github.com/NREL/nrelCsvExt/compare/main...develop)
 
+### Changed
+
+- Replaced `noWarn` option with `warn` option in all relevant functions to avoid
+  the double negative: `warn = true` vs. `noWarn = false`.
+
 ### Fixed
 
 - `csvImportHistory()` no longer crashes and also provides useful warnings

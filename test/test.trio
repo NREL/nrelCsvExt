@@ -181,7 +181,7 @@ src:
     // Overwrite history
     readAll(point and csvColumn).csvImportHistory(
       `io/test-his.csv`,
-      {tsColumn:"Timestamp", span:2020-01-01, noWarn, overwrite}
+      {tsColumn:"Timestamp", span:2020-01-01, -warn, overwrite}
     )
     
     // Check errors

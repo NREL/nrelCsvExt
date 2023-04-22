@@ -198,7 +198,7 @@ src:
   
     // Default options
     // These should always match csvImportRecs() defaults but are also needed locally
-    opts = merge({checked:true, commit:false, log:false, noWarn:false}, opts)
+    opts = merge({checked:true, commit:false, log:false, warn:true}, opts)
     
     // Record template
     template: {equip}
@@ -208,7 +208,7 @@ src:
     opts = opts.set("checked", opts.has("checked") and opts["checked"] != false)
     opts = opts.set("commit",  opts.has("commit")  and opts["commit"]  != false)
     opts = opts.set("log",     opts.has("log")     and opts["log"]     != false)
-    opts = opts.set("noWarn",  opts.has("noWarn")  and opts["noWarn"]  != false)
+    opts = opts.set("warn",    opts.has("warn")    and opts["warn"]    != false)
     
     // Downstream options for csvImportRecs()
     downstreamOpts: opts.merge({commit:false, template:template})
@@ -243,7 +243,7 @@ src:
       // Map site
       try do
         row = row
-          .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+          .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], opts->warn))
           .remove("siteName")
       catch (ex) do
         if (opts->checked) throw ex
@@ -253,7 +253,7 @@ src:
       // Map space
       try do
         row = row
-          .set("spaceRef", getSpaceByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+          .set("spaceRef", getSpaceByRefOrName(row, opts["matchRefsBy"], opts->warn))
           .remove("spaceName")
       catch (ex) do
         if (opts->checked) throw ex
@@ -264,7 +264,7 @@ src:
       if (row.has("equipName") or row.has("equipRef")) do
         try do
           row = row
-            .set("equipRef", getEquipByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+            .set("equipRef", getEquipByRefOrName(row, opts["matchRefsBy"], opts->warn))
             .remove("equipName")
         catch (ex) do
           if (opts->checked) throw ex
@@ -304,15 +304,15 @@ src:
     // Default options
     opts = merge({
       checked:  true,
-      noWarn:   false,
+      warn:     true,
       tsColumn: "ts",
       tz:       now().tz
     }, opts)
 
     // T/F options
     opts = opts.set("checked",   opts.has("checked")   and opts["checked"]   != false)
-    opts = opts.set("noWarn",    opts.has("noWarn")    and opts["noWarn"]    != false)
     opts = opts.set("overwrite", opts.has("overwrite") and opts["overwrite"] != false)
+    opts = opts.set("warn",      opts.has("warn")      and opts["warn"]      != false)
 
     // Span
     if (opts["span"] == null and opts->overwrite) do
@@ -487,7 +487,7 @@ src:
       before: size(data)
       data = data.findAll() row => row.has(timeCol) and row.has(valCol)
       after: size(data)
-      if (not opts->noWarn and (after < before)) do
+      if (opts->warn and (after < before)) do
         logWarn("csvImportHistory", "Column '" + valCol + "': Dropped " + (before - after) +
           " rows of data that are missing a timestamp and/or value.")
       end
@@ -502,13 +502,13 @@ src:
       before = size(data)
       data = data.findAll row => row.has("ts") and row.has("val")
       after = size(data)
-      if (not opts->noWarn and (after < before)) do
+      if (opts->warn and (after < before)) do
         logWarn("csvImportHistory", "Unable to parse " + (before - after) + " rows of data for column '" + valCol + "'.")
       end
       
       // Return if empty (with a warning)
       if (data.isEmpty) do
-        if (not opts->noWarn and (after < before)) do
+        if (opts->warn and (after < before)) do
           logWarn("csvImportHistory", "Grid for column '" + valCol + "' is empty after parsing.")
         end
         return null
@@ -642,10 +642,10 @@ src:
       end
 
       // Write history to point
-      if (opts->noWarn) do
-        data.hisWrite(point, {noWarn})
-      else do
+      if (opts->warn) do
         data.hisWrite(point)
+      else do
+        data.hisWrite(point, {noWarn}) // Suppress warnings
       end
 
       // Return processed point id
@@ -735,7 +735,7 @@ src:
         if (opts->checked) do
           logErr("csvImportHistory", msg, ex)
           errorFound = true
-        else if (not noWarn) do
+        else if (opts->warn) do
           logWarn("csvImportHistory", msg, ex)
         end
         return null
@@ -774,7 +774,7 @@ src:
   
     // Default options
     // These should always match csvImportRecs() defaults but are also needed locally
-    opts = merge({checked:true, commit:false, log:false, noWarn:false, tz:now().tz}, opts)
+    opts = merge({checked:true, commit:false, log:false, warn:true, tz:now().tz}, opts)
     
     // Record template
     template: {point}
@@ -784,7 +784,7 @@ src:
     opts = opts.set("checked", opts.has("checked") and opts["checked"] != false)
     opts = opts.set("commit",  opts.has("commit")  and opts["commit"]  != false)
     opts = opts.set("log",     opts.has("log")     and opts["log"]     != false)
-    opts = opts.set("noWarn",  opts.has("noWarn")  and opts["noWarn"]  != false)
+    opts = opts.set("warn",    opts.has("warn")    and opts["warn"]    != false)
   
     // Downstream options for csvImportRecs()
     downstreamOpts: opts.merge({commit:false, template:template})
@@ -824,7 +824,7 @@ src:
       // Map site
       try do
         row = row
-          .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+          .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], opts->warn))
           .remove("siteName")
       catch (ex) do
         if (opts->checked) throw ex
@@ -834,7 +834,7 @@ src:
       // Map space
       try do
         row = row
-          .set("spaceRef", getSpaceByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+          .set("spaceRef", getSpaceByRefOrName(row, opts["matchRefsBy"], opts->warn))
           .remove("spaceName")
       catch (ex) do
         if (opts->checked) throw ex
@@ -844,7 +844,7 @@ src:
       // Map equip
       try do
         row = row
-          .set("equipRef", getEquipByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+          .set("equipRef", getEquipByRefOrName(row, opts["matchRefsBy"], opts->warn))
           .remove("equipName")
       catch (ex) do
         if (opts->checked) throw ex
@@ -854,7 +854,7 @@ src:
       // Map weather station
       try do
         row = row
-          .set("weatherStationRef", getWeatherStationByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+          .set("weatherStationRef", getWeatherStationByRefOrName(row, opts["matchRefsBy"], opts->warn))
           .remove("weatherStationName")
       catch (ex) do
         if (opts->checked) throw ex
@@ -934,7 +934,7 @@ src:
       checked:         true,
       commit:          false,
       log:             false,
-      noWarn:          false
+      warn:            true
     }, opts)
   
     // Valid pass-through options for ioStreamCsv()
@@ -944,7 +944,7 @@ src:
     opts = opts.set("checked", opts.has("checked") and opts["checked"] != false)
     opts = opts.set("commit",  opts.has("commit")  and opts["commit"]  != false)
     opts = opts.set("log",     opts.has("log")     and opts["log"]     != false)
-    opts = opts.set("noWarn",  opts.has("noWarn")  and opts["noWarn"]  != false) // Not used here
+    opts = opts.set("warn",    opts.has("warn")    and opts["warn"]    != false) // Not used here
   
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Helper Functions
@@ -1096,7 +1096,7 @@ src:
   
     // Default options
     // These should always match csvImportRecs() defaults but are also needed locally
-    opts = merge({checked:true, commit:false, log:false, noWarn:false, tz:now().tz}, opts)
+    opts = merge({checked:true, commit:false, log:false, warn:true, tz:now().tz}, opts)
     
     // Record template
     template: {site}
@@ -1106,7 +1106,7 @@ src:
     opts = opts.set("checked", opts.has("checked") and opts["checked"] != false)
     opts = opts.set("commit",  opts.has("commit")  and opts["commit"]  != false)
     opts = opts.set("log",     opts.has("log")     and opts["log"]     != false)
-    opts = opts.set("noWarn",  opts.has("noWarn")  and opts["noWarn"]  != false)
+    opts = opts.set("warn",    opts.has("warn")    and opts["warn"]    != false)
     
     // Downstream options for csvImportRecs()
     downstreamOpts: opts.merge({commit:false, template:template})
@@ -1149,7 +1149,7 @@ src:
       // Map weather station
       try do
         row = row
-          .set("weatherStationRef", getWeatherStationByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+          .set("weatherStationRef", getWeatherStationByRefOrName(row, opts["matchRefsBy"], opts->warn))
           .remove("weatherStationName")
       catch (ex) do
         if (opts->checked) throw ex
@@ -1160,7 +1160,7 @@ src:
       if (row.has("siteName") or row.has("siteRef")) do
         try do
           row = row
-            .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+            .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], opts->warn))
             .remove("siteName")
         catch (ex) do
           if (opts->checked) throw ex
@@ -1217,7 +1217,7 @@ src:
   
     // Default options
     // These should always match csvImportRecs() defaults but are also needed locally
-    opts = merge({checked:true, commit:false, log:false, noWarn:false}, opts)
+    opts = merge({checked:true, commit:false, log:false, warn:true}, opts)
     
     // Record template
     template: {space}
@@ -1227,7 +1227,7 @@ src:
     opts = opts.set("checked", opts.has("checked") and opts["checked"] != false)
     opts = opts.set("commit",  opts.has("commit")  and opts["commit"]  != false)
     opts = opts.set("log",     opts.has("log")     and opts["log"]     != false)
-    opts = opts.set("noWarn",  opts.has("noWarn")  and opts["noWarn"]  != false)
+    opts = opts.set("warn",    opts.has("warn")    and opts["warn"]    != false)
     
     // Downstream options for csvImportRecs()
     downstreamOpts: opts.merge({commit:false, template:template})
@@ -1268,7 +1268,7 @@ src:
       // Map site
       try do
         row = row
-          .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+          .set("siteRef", getSiteByRefOrName(row, opts["matchRefsBy"], opts->warn))
           .remove("siteName")
       catch (ex) do
         if (opts->checked) throw ex
@@ -1279,7 +1279,7 @@ src:
       if (row.has("spaceName") or row.has("spaceRef")) do
         try do
           row = row
-            .set("spaceRef", getSpaceByRefOrName(row, opts["matchRefsBy"], opts->noWarn))
+            .set("spaceRef", getSpaceByRefOrName(row, opts["matchRefsBy"], opts->warn))
             .remove("spaceName")
         catch (ex) do
           if (opts->checked) throw ex
@@ -1322,7 +1322,7 @@ src:
   
     // Default options
     // These should always match csvImportRecs() defaults but are also needed locally
-    opts = merge({checked:true, commit:false, log:false, noWarn:false, tz:now().tz}, opts)
+    opts = merge({checked:true, commit:false, log:false, warn:true, tz:now().tz}, opts)
     
     // Record template
     template: {weatherStation}
@@ -1332,7 +1332,7 @@ src:
     opts = opts.set("checked", opts.has("checked") and opts["checked"] != false)
     opts = opts.set("commit",  opts.has("commit")  and opts["commit"]  != false)
     opts = opts.set("log",     opts.has("log")     and opts["log"]     != false)
-    opts = opts.set("noWarn",  opts.has("noWarn")  and opts["noWarn"]  != false)
+    opts = opts.set("warn",    opts.has("warn")    and opts["warn"]    != false)
     
     // Downstream options for csvImportRecs()
     downstreamOpts: opts.merge({commit:false, template:template})
@@ -1505,7 +1505,7 @@ name:getEquipByRefOrName
 func
 nodoc
 src:
-  (rec, finder:null, noWarn:false) => do
+  (rec, finder:null, warn:true) => do
     // Find function
     if (finder == null) do
       // Using dis()
@@ -1523,7 +1523,7 @@ src:
     spaceFilter: row => (rec["spaceRef"] == null) or (row["spaceRef"] == rec->spaceRef)
   
     // Warn on conflict
-    if (rec.has("equipRef") and rec.has("equipName") and not noWarn) do
+    if (rec.has("equipRef") and rec.has("equipName") and warn) do
       logWarn("getEquipByRefOrName",
         "Record \"" + rec.dis + "\" " +
         "has both 'equipRef' and 'equipName'; " +
@@ -1560,7 +1560,7 @@ name:getSiteByRefOrName
 func
 nodoc
 src:
-  (rec, finder:null, noWarn:false) => do
+  (rec, finder:null, warn:true) => do
     // Find function
     if (finder == null) do
       // Using dis()
@@ -1574,7 +1574,7 @@ src:
     end
   
     // Warn on conflict
-    if (rec.has("siteRef") and rec.has("siteName") and not noWarn) do
+    if (rec.has("siteRef") and rec.has("siteName") and warn) do
       logWarn("getSiteByRefOrName",
         "Record \"" + rec.dis + "\" " +
         "has both 'siteRef' and 'siteName'; " +
@@ -1608,7 +1608,7 @@ name:getSpaceByRefOrName
 func
 nodoc
 src:
-  (rec, finder:null, noWarn:false) => do
+  (rec, finder:null, warn:true) => do
     // Find function
     if (finder == null) do
       // Using dis()
@@ -1625,7 +1625,7 @@ src:
     siteFilter: row => (rec["siteRef"] == null) or (row["siteRef"] == rec->siteRef)
   
     // Warn on conflict
-    if (rec.has("spaceRef") and rec.has("spaceName") and not noWarn) do
+    if (rec.has("spaceRef") and rec.has("spaceName") and warn) do
       logWarn("getSpaceByRefOrName",
         "Record \"" + rec.dis + "\" " +
         "has both 'spaceRef' and 'spaceName'; " +
@@ -1661,7 +1661,7 @@ name:getWeatherStationByRefOrName
 func
 nodoc
 src:
-  (rec, finder:null, noWarn:false) => do
+  (rec, finder:null, warn:true) => do
     // Find function
     if (finder == null) do
       // Using dis()
@@ -1675,7 +1675,7 @@ src:
     end
     
     // Warn on conflict
-    if (rec.has("weatherStationRef") and rec.has("weatherStationName") and not noWarn) do
+    if (rec.has("weatherStationRef") and rec.has("weatherStationName") and warn) do
       logWarn("getWeatherStationByRefOrName",
         "Record \"" + rec.dis + "\" " +
         "has both 'weatherStationRef' and 'weatherStationName'; " +
