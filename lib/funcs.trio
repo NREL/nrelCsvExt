@@ -620,9 +620,9 @@ src:
         data = data.map() row => row.set("ts", (row->ts).toTimeZone(point->tz))
       end
 
-      // Drop any data outside of span
+      // Drop any data outside of span: start inclusive and end exclusive
       if (opts.has("span")) do
-        data = data.findAll() row => (row->ts >= opts->span.start) and (row->ts <= opts->span.end)
+        data = data.findAll() row => (row->ts >= opts->span.start) and (row->ts < opts->span.end)
       end
 
       // Drop any data for which the point already has history
