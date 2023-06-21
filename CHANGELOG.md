@@ -16,6 +16,8 @@ This file tracks notable changes to **nreCsvExt**. The format is based on
   the double negative: `warn = true` vs. `noWarn = false`
 - The `span` option in `csvImportHistory()` is now start inclusive and end
   exclusive for consistency with the rest of SkySpark
+- Updated `csvImportHistory()` warning and error messages to include point ID
+  along with display name
 
 ### Fixed
 
