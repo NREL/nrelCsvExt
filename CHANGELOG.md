@@ -10,6 +10,26 @@ This file tracks notable changes to **nreCsvExt**. The format is based on
 
 [View Changes](https://github.com/NREL/nrelCsvExt/compare/main...develop)
 
+## [v1.0.0] (2023-08-18)
+
+[v1.0.0]: https://github.com/NREL/nrelCsvExt/releases/tag/v1.0.0
+
+[View Changes](https://github.com/NREL/nrelCsvExt/compare/v0.9.6...v1.0.0)
+
+### Changed
+
+- Replaced `noWarn` option with `warn` option in all relevant functions to avoid
+  the double negative: `warn = true` vs. `noWarn = false`
+- The `span` option in `csvImportHistory()` is now start inclusive and end
+  exclusive for consistency with the rest of SkySpark
+- Updated `csvImportHistory()` warning and error messages to include point ID
+  along with display name
+
+### Fixed
+
+- `csvImportHistory()` no longer crashes and also provides useful warnings
+  when a value column is present in the source file but contains no data
+
 ## [v0.9.6 Beta] (2023-04-11)
 
 [v0.9.6 Beta]: https://github.com/NREL/nrelCsvExt/releases/tag/v0.9.6

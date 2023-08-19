@@ -15,7 +15,7 @@ class Build : BuildPod
   {
     podName = "nrelCsvExt"
     summary = "Import and export functions for CSV data"
-    version = Version("0.9.6")
+    version = Version("1.0.0")
     meta    = [
                 "ext.name":        "nrelCsv",
                 "ext.depends":     "io,nrelUtility",
@@ -23,7 +23,7 @@ class Build : BuildPod
                 "org.name":        "NREL",
                 "org.uri":         "https://www.nrel.gov/",
                 "proj.name":       "NREL CSV Extension",
-                "proj.uri":        "https://github.nrel.gov/IntelligentCampus/nrelCsvExt",
+                "proj.uri":        "https://github.com/NREL/nrelCsvExt",
                 "license.name":    "BSD-3",
                 "skyspark.docExt": "true",
               ]
@@ -35,7 +35,6 @@ class Build : BuildPod
   // To publish to StackHub, use: bin/fan /path/to/build.fan publish 
   // For more information, see: https://skyfoundry.com/doc/stackhub/index#publishing
   
-  //Future Use...
-  //@Target { help = "Publish to stackhub.org " }
-  //Void publish() { stackhub::PublishTask(this).run }
+  @Target { help = "Publish to stackhub.org " }
+  Void publish() { stackhub::PublishTask(this).run }
 }

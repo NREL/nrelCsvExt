@@ -80,8 +80,8 @@ within the *Docs* interface in the *Code* app.
 Contributing
 ------------
 
-To contribute to `nrelUtilityExt`, please feel free to open an issue or a submit
-a pull request. If you want to modify the code, you can use `importFunctions()`
+To contribute to `nrelCsvExt`, please feel free to open an issue or a submit a
+pull request. If you want to modify the code, you can use `importFunctions()`
 and `exportFunctions()` from [nrelUtilityExt] to make your life easier.
 Suggested workflow:
 
