@@ -10,6 +10,12 @@ This file tracks notable changes to **nreCsvExt**. The format is based on
 
 [View Changes](https://github.com/NREL/nrelCsvExt/compare/main...develop)
 
+## [v1.0.0] (2023-08-18)
+
+[v1.0.0]: https://github.com/NREL/nrelCsvExt/releases/tag/v1.0.0
+
+[View Changes](https://github.com/NREL/nrelCsvExt/compare/v0.9.6...v1.0.0)
+
 ### Changed
 
 - Replaced `noWarn` option with `warn` option in all relevant functions to avoid
