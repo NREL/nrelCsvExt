@@ -9,6 +9,11 @@ software.
 
 The NREL CSV extension requires SkySpark 3.1 or later and
 [nrelUtilityExt]`https://stackhub.org/package/nrelUtilityExt` 2.0 or later.
+Most functions are `overridable`. See the **nrelCsvExt**
+[Github repository]`https://github.com/NREL/nrelCsvExt/` for important
+[release notes]`https://github.com/NREL/nrelCsvExt/releases` and a
+[change log]`https://github.com/NREL/nrelCsvExt/blob/main/CHANGELOG.md`.
+Please report issues [here]`https://github.com/NREL/nrelCsvExt/issues`.
 
 Importing Records [#importRecs]
 *******************************
@@ -560,7 +565,7 @@ convenience processing. The function arguments are:
 - 'opts': Dict of control [options]`ext-nrelCsv::doc#exportHisOpts`
 
 Control Options [#exportHisOpts]
---------------------------------
+================================
 
 Control options for `csvExportHistory` are passed as name-value pairs within
 the 'opts' argument. The following options are supported:
@@ -589,7 +594,7 @@ be passed as markers, with 'x' equivalent to 'x:true' and '-x' equivalent to
 'preview:10'.
 
 Workflow [#exportHisWorkflow]
------------------------------
+=============================
 
 The export workflow is as follows:
 
